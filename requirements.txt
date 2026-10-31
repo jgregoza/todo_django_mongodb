@@ -1,0 +1,6 @@
+Django>=5.0,<7.0
+Pillow>=10.0.0
+python-dotenv>=1.0.0
+pymongo>=4.10.0
+mongoengine>=0.29.0
+dnspython>=2.6.0

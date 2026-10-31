@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TODO List Pro | Django & PythonAnywhere</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col antialiased">
+
+  <!-- Encabezado / Navbar -->
+  <header class="bg-white/80 backdrop-blur-md sticky top-0 z-30 border-b border-slate-200">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-white shadow-md shadow-emerald-500/20">
+          <i data-lucide="check-square" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <h1 class="text-lg font-bold text-slate-900 leading-tight">TODO Pro</h1>
+          <p class="text-xs text-slate-500 font-medium">Django 5 • PythonAnywhere Ready</p>
+        </div>
+      </div>
+
+      <!-- Estado & Botón Nueva Tarea -->
+      <div class="flex items-center gap-3">
+        <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span>BD Nativa + Imágenes Activas</span>
+        </div>
+
+        <button onclick="openModal('new-task-modal')" class="hidden sm:inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl shadow-md shadow-emerald-600/25 transition">
+          <i data-lucide="plus" class="w-4 h-4"></i>
+          Nueva Tarea
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Contenedor Principal -->
+  <main class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full">
+
+    <!-- Tarjetas de Métricas -->
+    <section class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-500">Total Tareas</span>
+          <div class="p-2 rounded-lg bg-slate-100 text-slate-600">
+            <i data-lucide="layers" class="w-4 h-4"></i>
+          </div>
+        </div>
+        <p class="text-2xl font-bold text-slate-900">{{ stats.total }}</p>
+      </div>
+
+      <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-semibold uppercase tracking-wider text-amber-600">Pendientes</span>
+          <div class="p-2 rounded-lg bg-amber-50 text-amber-600">
+            <i data-lucide="clock" class="w-4 h-4"></i>
+          </div>
+        </div>
+        <p class="text-2xl font-bold text-amber-600">{{ stats.pending }}</p>
+      </div>
+
+      <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-semibold uppercase tracking-wider text-emerald-600">Completadas</span>
+          <div class="p-2 rounded-lg bg-emerald-50 text-emerald-600">
+            <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+          </div>
+        </div>
+        <p class="text-2xl font-bold text-emerald-600">{{ stats.completed }}</p>
+      </div>
+
+      <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-semibold uppercase tracking-wider text-teal-600">Progreso</span>
+          <span class="text-xs font-bold text-teal-600">{{ stats.percentage }}%</span>
+        </div>
+        <div class="w-full bg-slate-100 rounded-full h-3 mt-3 overflow-hidden">
+          <div class="bg-teal-500 h-3 rounded-full transition-all duration-500" style="width: {{ stats.percentage }}%"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Barra de Filtros y Búsqueda -->
+    <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm mb-6 flex flex-col md:flex-row items-center justify-between gap-4">
+      
+      <!-- Pestañas de Estado -->
+      <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-xl w-full md:w-auto">
+        <a href="?status=all{% if current_priority %}&priority={{ current_priority }}{% endif %}{% if current_category %}&category={{ current_category }}{% endif %}{% if search_query %}&q={{ search_query }}{% endif %}"
+           class="px-3.5 py-1.5 text-xs font-semibold rounded-lg transition text-center flex-1 md:flex-none {% if current_status == 'all' %}bg-white text-slate-900 shadow-sm{% else %}text-slate-600 hover:text-slate-900{% endif %}">
+          Todas
+        </a>
+        <a href="?status=pending{% if current_priority %}&priority={{ current_priority }}{% endif %}{% if current_category %}&category={{ current_category }}{% endif %}{% if search_query %}&q={{ search_query }}{% endif %}"
+           class="px-3.5 py-1.5 text-xs font-semibold rounded-lg transition text-center flex-1 md:flex-none {% if current_status == 'pending' %}bg-white text-slate-900 shadow-sm{% else %}text-slate-600 hover:text-slate-900{% endif %}">
+          Pendientes
+        </a>
+        <a href="?status=completed{% if current_priority %}&priority={{ current_priority }}{% endif %}{% if current_category %}&category={{ current_category }}{% endif %}{% if search_query %}&q={{ search_query }}{% endif %}"
+           class="px-3.5 py-1.5 text-xs font-semibold rounded-lg transition text-center flex-1 md:flex-none {% if current_status == 'completed' %}bg-white text-slate-900 shadow-sm{% else %}text-slate-600 hover:text-slate-900{% endif %}">
+          Completadas
+        </a>
+      </div>
+
+      <!-- Filtros por Dropdowns y Búsqueda -->
+      <form method="GET" class="flex flex-wrap sm:flex-nowrap items-center gap-3 w-full md:w-auto">
+        <input type="hidden" name="status" value="{{ current_status }}">
+
+        <select name="priority" onchange="this.form.submit()" class="text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
+          <option value="" {% if not current_priority %}selected{% endif %}>Prioridad: Todas</option>
+          <option value="alta" {% if current_priority == 'alta' %}selected{% endif %}>🔴 Alta</option>
+          <option value="media" {% if current_priority == 'media' %}selected{% endif %}>🟡 Media</option>
+          <option value="baja" {% if current_priority == 'baja' %}selected{% endif %}>🔵 Baja</option>
+        </select>
+
+        <select name="category" onchange="this.form.submit()" class="text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
+          <option value="" {% if not current_category %}selected{% endif %}>Categoría: Todas</option>
+          {% for cat in categories %}
+            <option value="{{ cat }}" {% if current_category == cat %}selected{% endif %}>{{ cat }}</option>
+          {% endfor %}
+        </select>
+
+        <div class="relative flex-1 sm:w-48">
+          <i data-lucide="search" class="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+          <input type="text" name="q" value="{{ search_query }}" placeholder="Buscar tarea..." class="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
+        </div>
+      </form>
+    </div>
+
+    <!-- Lista de Tareas -->
+    <div class="space-y-3">
+      {% for todo in todos %}
+      <div class="group bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md transition-all duration-200 flex items-start justify-between gap-4 {% if todo.completed %}bg-slate-50/60 opacity-80{% endif %}">
+        
+        <!-- Toggle button, Info and Image -->
+        <div class="flex items-start gap-3.5 flex-1 min-w-0">
+          <form method="POST" action="{% url 'toggle_todo' todo.id %}" class="mt-0.5">
+            {% csrf_token %}
+            <button type="submit" class="w-6 h-6 rounded-lg border flex items-center justify-center transition-all duration-200 {% if todo.completed %}bg-emerald-500 border-emerald-500 text-white shadow-sm shadow-emerald-500/30{% else %}border-slate-300 hover:border-emerald-500 text-transparent hover:text-emerald-500 bg-white{% endif %}">
+              <i data-lucide="check" class="w-3.5 h-3.5 stroke-[3]"></i>
+            </button>
+          </form>
+
+          <!-- Imagen adjunta (si tiene) -->
+          {% if todo.image_url %}
+          <div class="shrink-0 cursor-pointer" onclick="viewFullImage('{{ todo.image_url }}', '{{ todo.title|escapejs }}')">
+            <img src="{{ todo.image_url }}" alt="{{ todo.title }}" class="w-14 h-14 object-cover rounded-xl border border-slate-200 shadow-sm hover:opacity-90 hover:scale-105 transition">
+          </div>
+          {% endif %}
+
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <h3 class="text-sm font-semibold text-slate-900 truncate {% if todo.completed %}line-through text-slate-400{% endif %}">
+                {{ todo.title }}
+              </h3>
+
+              <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider
+                {% if todo.priority == 'alta' %}bg-rose-50 text-rose-600 border border-rose-200
+                {% elif todo.priority == 'media' %}bg-amber-50 text-amber-700 border border-amber-200
+                {% else %}bg-sky-50 text-sky-600 border border-sky-200{% endif %}">
+                {{ todo.priority }}
+              </span>
+
+              <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                <i data-lucide="tag" class="w-2.5 h-2.5 mr-1"></i>
+                {{ todo.category }}
+              </span>
+
+              {% if todo.image_url %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                <i data-lucide="image" class="w-2.5 h-2.5 mr-1"></i>
+                Imagen
+              </span>
+              {% endif %}
+            </div>
+
+            {% if todo.description %}
+            <p class="text-xs text-slate-500 mt-1 line-clamp-2 {% if todo.completed %}line-through text-slate-400{% endif %}">
+              {{ todo.description }}
+            </p>
+            {% endif %}
+
+            <div class="flex items-center gap-4 mt-2 text-[11px] text-slate-400">
+              {% if todo.due_date %}
+              <span class="flex items-center gap-1 font-medium text-slate-500">
+                <i data-lucide="calendar" class="w-3 h-3"></i>
+                Límite: {{ todo.due_date }}
+              </span>
+              {% endif %}
+              <span class="flex items-center gap-1">
+                <i data-lucide="clock" class="w-3 h-3"></i>
+                {{ todo.created_at }}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Acciones: Editar y Eliminar -->
+        <div class="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition">
+          <button onclick="openEditModal('{{ todo.id }}', '{{ todo.title|escapejs }}', '{{ todo.description|escapejs }}', '{{ todo.priority }}', '{{ todo.category|escapejs }}', '{{ todo.due_date|default:'' }}', '{{ todo.image_url|default:'' }}')" 
+                  class="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition" title="Editar">
+            <i data-lucide="edit-3" class="w-4 h-4"></i>
+          </button>
+
+          <form method="POST" action="{% url 'delete_todo' todo.id %}" onsubmit="return confirm('¿Seguro que deseas eliminar esta tarea?');">
+            {% csrf_token %}
+            <button type="submit" class="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition" title="Eliminar">
+              <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
+          </form>
+        </div>
+
+      </div>
+      {% empty %}
+      <!-- Estado Vacío -->
+      <div class="bg-white rounded-2xl border border-slate-200 p-12 text-center">
+        <div class="w-16 h-16 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto mb-4">
+          <i data-lucide="clipboard-check" class="w-8 h-8"></i>
+        </div>
+        <h3 class="text-base font-bold text-slate-900 mb-1">¡No hay tareas registradas!</h3>
+        <p class="text-xs text-slate-500 max-w-sm mx-auto mb-6">Comienza organizando tu día creando una nueva tarea con o sin imágenes adjuntas.</p>
+        <button onclick="openModal('new-task-modal')" class="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-md shadow-emerald-600/25 transition">
+          <i data-lucide="plus" class="w-4 h-4"></i>
+          Agregar Nueva Tarea
+        </button>
+      </div>
+      {% endfor %}
+    </div>
+
+  </main>
+
+  <!-- Botón Flotante para Móviles -->
+  <button onclick="openModal('new-task-modal')" class="sm:hidden fixed bottom-6 right-6 w-14 h-14 bg-emerald-600 text-white rounded-full shadow-lg shadow-emerald-600/40 flex items-center justify-center text-xl z-20">
+    <i data-lucide="plus" class="w-6 h-6"></i>
+  </button>
+
+  <!-- Modal: Nueva Tarea (con soporte de imagen) -->
+  <div id="new-task-modal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 transform transition-all">
+      <div class="flex items-center justify-between pb-4 border-b border-slate-100 mb-5">
+        <h2 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+          <i data-lucide="plus-circle" class="w-5 h-5 text-emerald-600"></i>
+          Nueva Tarea
+        </h2>
+        <button onclick="closeModal('new-task-modal')" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form method="POST" action="{% url 'create_todo' %}" enctype="multipart/form-data" class="space-y-4">
+        {% csrf_token %}
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1.5">Título <span class="text-rose-500">*</span></label>
+          <input type="text" name="title" required placeholder="Ej: Subir despliegue a PythonAnywhere..." class="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1.5">Descripción (Opcional)</label>
+          <textarea name="description" rows="2" placeholder="Detalles o notas..." class="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"></textarea>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1.5">Prioridad</label>
+            <select name="priority" class="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
+              <option value="alta">🔴 Alta</option>
+              <option value="media" selected>🟡 Media</option>
+              <option value="baja">🔵 Baja</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1.5">Categoría</label>
+            <input type="text" name="category" value="General" class="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1.5">Fecha Límite</label>
+            <input type="date" name="due_date" class="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1.5">Adjuntar Imagen (Opcional)</label>
+            <input type="file" name="image" accept="image/*" class="w-full text-xs text-slate-500 file:mr-2 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 cursor-pointer">
+          </div>
+        </div>
+
+        <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+          <button type="button" onclick="closeModal('new-task-modal')" class="px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition">
+            Cancelar
+          </button>
+          <button type="submit" class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-md shadow-emerald-600/20 transition">
+            Guardar Tarea
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Editar Tarea -->
+  <div id="edit-task-modal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 transform transition-all">
+      <div class="flex items-center justify-between pb-4 border-b border-slate-100 mb-5">
+        <h2 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+          <i data-lucide="edit" class="w-5 h-5 text-emerald-600"></i>
+          Editar Tarea
+        </h2>
+        <button onclick="closeModal('edit-task-modal')" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form id="edit-task-form" method="POST" action="" enctype="multipart/form-data" class="space-y-4">
+        {% csrf_token %}
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1.5">Título <span class="text-rose-500">*</span></label>
+          <input type="text" id="edit-title" name="title" required class="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1.5">Descripción</label>
+          <textarea id="edit-description" name="description" rows="2" class="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"></textarea>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1.5">Prioridad</label>
+            <select id="edit-priority" name="priority" class="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
+              <option value="alta">🔴 Alta</option>
+              <option value="media">🟡 Media</option>
+              <option value="baja">🔵 Baja</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1.5">Categoría</label>
+            <input type="text" id="edit-category" name="category" class="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1.5">Fecha Límite</label>
+            <input type="date" id="edit-due-date" name="due_date" class="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1.5">Cambiar Imagen</label>
+            <input type="file" name="image" accept="image/*" class="w-full text-xs text-slate-500 file:mr-2 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 cursor-pointer">
+          </div>
+        </div>
+
+        <!-- Preview y opción de borrar imagen -->
+        <div id="edit-image-preview-container" class="hidden items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+          <img id="edit-image-preview" src="" alt="Vista previa" class="w-12 h-12 object-cover rounded-lg border border-slate-200">
+          <div class="flex-1">
+            <p class="text-xs font-medium text-slate-700">Imagen actual adjunta</p>
+            <label class="flex items-center gap-1.5 mt-1 text-xs text-rose-600 font-semibold cursor-pointer">
+              <input type="checkbox" name="clear_image" class="rounded text-rose-600">
+              Eliminar esta imagen
+            </label>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+          <button type="button" onclick="closeModal('edit-task-modal')" class="px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition">
+            Cancelar
+          </button>
+          <button type="submit" class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-md shadow-emerald-600/20 transition">
+            Actualizar Tarea
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Visor de Imagen en Grande (Lightbox) -->
+  <div id="image-lightbox-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onclick="closeModal('image-lightbox-modal')">
+    <div class="relative max-w-3xl max-h-[90vh] flex flex-col items-center">
+      <img id="lightbox-img" src="" alt="" class="max-w-full max-h-[80vh] rounded-2xl shadow-2xl object-contain border border-white/20">
+      <p id="lightbox-caption" class="text-white text-sm font-semibold mt-3 text-center"></p>
+    </div>
+  </div>
+
+  <footer class="mt-auto py-6 border-t border-slate-200/80 bg-white/50 text-center text-xs text-slate-400">
+    Desarrollado con Django 5 • Optimizado para PythonAnywhere
+  </footer>
+
+  <script>
+    lucide.createIcons();
+
+    function openModal(id) {
+      document.getElementById(id).classList.remove('hidden');
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).classList.add('hidden');
+    }
+
+    function openEditModal(id, title, description, priority, category, dueDate, imageUrl) {
+      const form = document.getElementById('edit-task-form');
+      form.action = `/todos/${id}/update/`;
+      document.getElementById('edit-title').value = title;
+      document.getElementById('edit-description').value = description;
+      document.getElementById('edit-priority').value = priority;
+      document.getElementById('edit-category').value = category;
+      document.getElementById('edit-due-date').value = dueDate;
+
+      const previewContainer = document.getElementById('edit-image-preview-container');
+      const previewImg = document.getElementById('edit-image-preview');
+      if (imageUrl) {
+        previewImg.src = imageUrl;
+        previewContainer.classList.remove('hidden');
+        previewContainer.classList.add('flex');
+      } else {
+        previewContainer.classList.add('hidden');
+        previewContainer.classList.remove('flex');
+      }
+
+      openModal('edit-task-modal');
+    }
+
+    function viewFullImage(url, title) {
+      document.getElementById('lightbox-img').src = url;
+      document.getElementById('lightbox-caption').innerText = title;
+      openModal('image-lightbox-modal');
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closeModal('new-task-modal');
+        closeModal('edit-task-modal');
+        closeModal('image-lightbox-modal');
+      }
+    });
+  </script>
+</body>
+</html>
