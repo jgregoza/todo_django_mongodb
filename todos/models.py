@@ -5,10 +5,11 @@ soporte nativo de subida de imágenes y cero latencia de conexión.
 """
 
 from django.db import models
+from django.contrib.auth.models import User
 
 
 class TodoTask(models.Model):
-    """Modelo de tarea con soporte para imágenes, prioridades y fechas límite."""
+    """Modelo de tarea con soporte para imágenes, prioridades y usuarios."""
 
     PRIORITY_CHOICES = [
         ("baja", "Baja"),
@@ -16,6 +17,14 @@ class TodoTask(models.Model):
         ("alta", "Alta"),
     ]
 
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="todos",
+        null=True,
+        blank=True,
+        verbose_name="Usuario",
+    )
     title = models.CharField(max_length=200, verbose_name="Título")
     description = models.TextField(blank=True, default="", verbose_name="Descripción")
     priority = models.CharField(
@@ -59,6 +68,7 @@ class TodoTask(models.Model):
             "completed": self.completed,
             "due_date": self.due_date.strftime("%Y-%m-%d") if self.due_date else None,
             "image_url": self.image.url if self.image else None,
+            "username": self.user.username if self.user else None,
             "created_at": self.created_at.strftime("%Y-%m-%d %H:%M") if self.created_at else None,
             "updated_at": self.updated_at.strftime("%Y-%m-%d %H:%M") if self.updated_at else None,
         }

@@ -9,6 +9,11 @@ urlpatterns = [
     path("todos/<int:todo_id>/update/", views.update_todo_view, name="update_todo"),
     path("todos/<int:todo_id>/delete/", views.delete_todo_view, name="delete_todo"),
 
+    # Autenticación (Logins)
+    path("login/", views.login_view, name="login"),
+    path("register/", views.register_view, name="register"),
+    path("logout/", views.logout_view, name="logout"),
+
     # REST API endpoints
     path("api/todos/", views.api_todos, name="api_todos"),
     path("api/todos/stats/", views.api_stats, name="api_stats"),

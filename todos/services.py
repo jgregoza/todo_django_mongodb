@@ -1,5 +1,5 @@
 """
-Capa de servicios para operaciones CRUD y estadísticas con Django ORM y soporte de imágenes.
+Capa de servicios para operaciones CRUD y estadísticas con Django ORM, soporte de imágenes y usuarios.
 """
 
 from datetime import datetime
@@ -7,9 +7,12 @@ from django.db.models import Q
 from .models import TodoTask
 
 
-def list_todos(status="all", priority="", category="", search=""):
-    """Lista tareas aplicando filtros de estado, prioridad, categoría y búsqueda."""
+def list_todos(user=None, status="all", priority="", category="", search=""):
+    """Lista tareas aplicando filtros de estado, prioridad, categoría, búsqueda y usuario."""
     queryset = TodoTask.objects.all()
+
+    if user and user.is_authenticated:
+        queryset = queryset.filter(Q(user=user) | Q(user__isnull=True))
 
     if status == "pending":
         queryset = queryset.filter(completed=False)
@@ -30,17 +33,20 @@ def list_todos(status="all", priority="", category="", search=""):
     return [t.to_dict() for t in queryset.order_by("-created_at")]
 
 
-def get_todo(todo_id):
+def get_todo(todo_id, user=None):
     """Obtiene una tarea por su ID."""
     try:
-        todo = TodoTask.objects.get(id=todo_id)
+        queryset = TodoTask.objects.all()
+        if user and user.is_authenticated:
+            queryset = queryset.filter(Q(user=user) | Q(user__isnull=True))
+        todo = queryset.get(id=todo_id)
         return todo.to_dict()
     except (TodoTask.DoesNotExist, ValueError):
         return None
 
 
-def create_todo(title, description="", priority="media", category="General", due_date=None, image=None):
-    """Crea una nueva tarea con soporte opcional de imagen."""
+def create_todo(title, description="", priority="media", category="General", due_date=None, image=None, user=None):
+    """Crea una nueva tarea con soporte de imagen y asociación al usuario."""
     parsed_due = None
     if due_date:
         try:
@@ -48,7 +54,10 @@ def create_todo(title, description="", priority="media", category="General", due
         except ValueError:
             parsed_due = None
 
+    assigned_user = user if user and user.is_authenticated else None
+
     todo = TodoTask.objects.create(
+        user=assigned_user,
         title=title.strip(),
         description=description.strip() if description else "",
         priority=priority if priority in ("baja", "media", "alta") else "media",
@@ -59,10 +68,13 @@ def create_todo(title, description="", priority="media", category="General", due
     return todo.to_dict()
 
 
-def update_todo(todo_id, title=None, description=None, priority=None, category=None, completed=None, due_date=None, image=None, clear_image=False):
+def update_todo(todo_id, title=None, description=None, priority=None, category=None, completed=None, due_date=None, image=None, clear_image=False, user=None):
     """Actualiza una tarea existente."""
     try:
-        todo = TodoTask.objects.get(id=todo_id)
+        queryset = TodoTask.objects.all()
+        if user and user.is_authenticated:
+            queryset = queryset.filter(Q(user=user) | Q(user__isnull=True))
+        todo = queryset.get(id=todo_id)
 
         if title is not None and title.strip():
             todo.title = title.strip()
@@ -95,10 +107,13 @@ def update_todo(todo_id, title=None, description=None, priority=None, category=N
         return None
 
 
-def toggle_todo(todo_id):
+def toggle_todo(todo_id, user=None):
     """Invierte el estado de completado de una tarea."""
     try:
-        todo = TodoTask.objects.get(id=todo_id)
+        queryset = TodoTask.objects.all()
+        if user and user.is_authenticated:
+            queryset = queryset.filter(Q(user=user) | Q(user__isnull=True))
+        todo = queryset.get(id=todo_id)
         todo.completed = not todo.completed
         todo.save(update_fields=["completed", "updated_at"])
         return todo.to_dict()
@@ -106,10 +121,13 @@ def toggle_todo(todo_id):
         return None
 
 
-def delete_todo(todo_id):
+def delete_todo(todo_id, user=None):
     """Elimina una tarea y su imagen si existe."""
     try:
-        todo = TodoTask.objects.get(id=todo_id)
+        queryset = TodoTask.objects.all()
+        if user and user.is_authenticated:
+            queryset = queryset.filter(Q(user=user) | Q(user__isnull=True))
+        todo = queryset.get(id=todo_id)
         if todo.image:
             todo.image.delete(save=False)
         todo.delete()
@@ -118,18 +136,25 @@ def delete_todo(todo_id):
         return False
 
 
-def get_categories():
+def get_categories(user=None):
     """Devuelve la lista única de categorías ordenadas."""
     defaults = {"General", "Trabajo", "Personal", "Estudio", "Urgente"}
-    existing = set(TodoTask.objects.values_list("category", flat=True).distinct())
+    queryset = TodoTask.objects.all()
+    if user and user.is_authenticated:
+        queryset = queryset.filter(Q(user=user) | Q(user__isnull=True))
+    existing = set(queryset.values_list("category", flat=True).distinct())
     all_cats = defaults.union({c for c in existing if c})
     return sorted(list(all_cats))
 
 
-def get_stats():
+def get_stats(user=None):
     """Calcula estadísticas generales de las tareas."""
-    total = TodoTask.objects.count()
-    completed = TodoTask.objects.filter(completed=True).count()
+    queryset = TodoTask.objects.all()
+    if user and user.is_authenticated:
+        queryset = queryset.filter(Q(user=user) | Q(user__isnull=True))
+
+    total = queryset.count()
+    completed = queryset.filter(completed=True).count()
     pending = total - completed
     percentage = round((completed / total * 100), 1) if total > 0 else 0
 

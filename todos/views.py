@@ -1,5 +1,5 @@
 """
-Vistas web y endpoints de API para la gestión de tareas con soporte de imágenes.
+Vistas web, autenticación de usuarios y endpoints de API.
 """
 
 import json
@@ -7,6 +7,9 @@ from django.shortcuts import render, redirect
 from django.http import JsonResponse, HttpResponseBadRequest, HttpResponseNotFound
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
+from django.contrib.auth import login, authenticate, logout
+from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
+from django.contrib import messages
 from . import services
 
 
@@ -18,13 +21,14 @@ def index_view(request):
     search = request.GET.get("q", "")
 
     todos = services.list_todos(
+        user=request.user,
         status=status,
         priority=priority,
         category=category,
         search=search,
     )
-    stats = services.get_stats()
-    categories = services.get_categories()
+    stats = services.get_stats(user=request.user)
+    categories = services.get_categories(user=request.user)
 
     context = {
         "todos": todos,
@@ -40,7 +44,7 @@ def index_view(request):
 
 @require_http_methods(["POST"])
 def create_todo_view(request):
-    """Acción de formulario web para crear una tarea, incluyendo subida de imágenes."""
+    """Acción de formulario web para crear una tarea."""
     title = request.POST.get("title", "").strip()
     description = request.POST.get("description", "").strip()
     priority = request.POST.get("priority", "media")
@@ -56,17 +60,18 @@ def create_todo_view(request):
             category=category,
             due_date=due_date,
             image=image,
+            user=request.user,
         )
     return redirect("index")
 
 
 @require_http_methods(["POST"])
 def toggle_todo_view(request, todo_id):
-    """Acción de alternar estado de completado desde formulario o fetch AJAX."""
-    updated = services.toggle_todo(todo_id)
+    """Acción de alternar estado de completado."""
+    updated = services.toggle_todo(todo_id, user=request.user)
     if request.headers.get("x-requested-with") == "XMLHttpRequest" or request.headers.get("accept") == "application/json":
         if updated:
-            stats = services.get_stats()
+            stats = services.get_stats(user=request.user)
             return JsonResponse({"success": True, "todo": updated, "stats": stats})
         return JsonResponse({"success": False, "error": "Tarea no encontrada"}, status=404)
     return redirect("index")
@@ -92,6 +97,7 @@ def update_todo_view(request, todo_id):
         due_date=due_date,
         image=image,
         clear_image=clear_image,
+        user=request.user,
     )
     return redirect("index")
 
@@ -99,10 +105,61 @@ def update_todo_view(request, todo_id):
 @require_http_methods(["POST"])
 def delete_todo_view(request, todo_id):
     """Acción de eliminar tarea."""
-    deleted = services.delete_todo(todo_id)
+    deleted = services.delete_todo(todo_id, user=request.user)
     if request.headers.get("x-requested-with") == "XMLHttpRequest" or request.headers.get("accept") == "application/json":
-        stats = services.get_stats()
+        stats = services.get_stats(user=request.user)
         return JsonResponse({"success": deleted, "stats": stats})
+    return redirect("index")
+
+
+# ==========================================
+# Autenticación de Usuarios (Logins)
+# ==========================================
+
+def login_view(request):
+    """Inicio de sesión de usuarios."""
+    if request.user.is_authenticated:
+        return redirect("index")
+
+    if request.method == "POST":
+        form = AuthenticationForm(request, data=request.POST)
+        if form.is_valid():
+            user = form.get_user()
+            login(request, user)
+            messages.success(request, f"¡Bienvenido de nuevo, {user.username}!")
+            return redirect("index")
+        else:
+            messages.error(request, "Usuario o contraseña incorrectos.")
+    else:
+        form = AuthenticationForm()
+
+    return render(request, "todos/login.html", {"form": form})
+
+
+def register_view(request):
+    """Registro de nuevas cuentas."""
+    if request.user.is_authenticated:
+        return redirect("index")
+
+    if request.method == "POST":
+        form = UserCreationForm(request.POST)
+        if form.is_valid():
+            user = form.save()
+            login(request, user)
+            messages.success(request, f"¡Cuenta creada con éxito! Bienvenido, {user.username}.")
+            return redirect("index")
+        else:
+            messages.error(request, "Por favor corrige los errores del formulario.")
+    else:
+        form = UserCreationForm()
+
+    return render(request, "todos/register.html", {"form": form})
+
+
+def logout_view(request):
+    """Cierre de sesión."""
+    logout(request)
+    messages.info(request, "Has cerrado sesión correctamente.")
     return redirect("index")
 
 
@@ -119,7 +176,7 @@ def api_todos(request):
         priority = request.GET.get("priority", "")
         category = request.GET.get("category", "")
         search = request.GET.get("q", "")
-        todos = services.list_todos(status=status, priority=priority, category=category, search=search)
+        todos = services.list_todos(user=request.user, status=status, priority=priority, category=category, search=search)
         return JsonResponse({"todos": todos, "count": len(todos)})
 
     elif request.method == "POST":
@@ -143,6 +200,7 @@ def api_todos(request):
             category=data.get("category", "General"),
             due_date=data.get("due_date"),
             image=image,
+            user=request.user,
         )
         return JsonResponse(todo, status=201)
 
@@ -151,7 +209,7 @@ def api_todos(request):
 @csrf_exempt
 def api_todo_detail(request, todo_id):
     """API para ver, actualizar o borrar tarea específica."""
-    todo = services.get_todo(todo_id)
+    todo = services.get_todo(todo_id, user=request.user)
     if not todo:
         return JsonResponse({"error": "Tarea no encontrada"}, status=404)
 
@@ -172,11 +230,12 @@ def api_todo_detail(request, todo_id):
             category=data.get("category"),
             completed=data.get("completed"),
             due_date=data.get("due_date"),
+            user=request.user,
         )
         return JsonResponse(updated)
 
     elif request.method == "DELETE":
-        services.delete_todo(todo_id)
+        services.delete_todo(todo_id, user=request.user)
         return JsonResponse({"deleted": True, "id": todo_id})
 
 
@@ -184,7 +243,7 @@ def api_todo_detail(request, todo_id):
 @csrf_exempt
 def api_toggle_todo(request, todo_id):
     """API para alternar completado."""
-    updated = services.toggle_todo(todo_id)
+    updated = services.toggle_todo(todo_id, user=request.user)
     if not updated:
         return JsonResponse({"error": "Tarea no encontrada"}, status=404)
     return JsonResponse(updated)
@@ -192,5 +251,5 @@ def api_toggle_todo(request, todo_id):
 
 def api_stats(request):
     """API con estadísticas generales."""
-    stats = services.get_stats()
+    stats = services.get_stats(user=request.user)
     return JsonResponse(stats)
