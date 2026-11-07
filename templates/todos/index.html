@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TODO List Pro | Django & PythonAnywhere</title>
+  <title>TaskPilot | Django & PythonAnywhere</title>
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons CDN -->
@@ -28,7 +28,7 @@
           <i data-lucide="check-square" class="w-5 h-5"></i>
         </div>
         <div>
-          <h1 class="text-lg font-bold text-slate-900 leading-tight">TODO Pro</h1>
+          <h1 class="text-lg font-bold text-slate-900 leading-tight">TaskPilot</h1>
           <p class="text-xs text-slate-500 font-medium">Django 5 • PythonAnywhere Ready</p>
         </div>
       </div>
@@ -41,9 +41,12 @@
             {{ request.user.username|first|upper }}
           </div>
           <span class="max-w-[100px] truncate">{{ request.user.username }}</span>
-          <a href="{% url 'logout' %}" class="ml-1 text-slate-400 hover:text-rose-600 transition" title="Cerrar sesión">
-            <i data-lucide="log-out" class="w-3.5 h-3.5"></i>
-          </a>
+          <form method="POST" action="{% url 'logout' %}" class="ml-1">
+            {% csrf_token %}
+            <button type="submit" class="text-slate-400 hover:text-rose-600 transition" title="Cerrar sesión">
+              <i data-lucide="log-out" class="w-3.5 h-3.5"></i>
+            </button>
+          </form>
         </div>
         {% else %}
         <div class="flex items-center gap-1.5">
@@ -124,7 +127,7 @@
 
     <!-- Barra de Filtros y Búsqueda -->
     <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm mb-6 flex flex-col md:flex-row items-center justify-between gap-4">
-      
+
       <!-- Pestañas de Estado -->
       <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-xl w-full md:w-auto">
         <a href="?status=all{% if current_priority %}&priority={{ current_priority }}{% endif %}{% if current_category %}&category={{ current_category }}{% endif %}{% if search_query %}&q={{ search_query }}{% endif %}"
@@ -169,8 +172,9 @@
     <!-- Lista de Tareas -->
     <div class="space-y-3">
       {% for todo in todos %}
+      {% url 'todo_image' todo.id as todo_image_url %}
       <div class="group bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md transition-all duration-200 flex items-start justify-between gap-4 {% if todo.completed %}bg-slate-50/60 opacity-80{% endif %}">
-        
+
         <!-- Toggle button, Info and Image -->
         <div class="flex items-start gap-3.5 flex-1 min-w-0">
           <form method="POST" action="{% url 'toggle_todo' todo.id %}" class="mt-0.5">
@@ -182,8 +186,8 @@
 
           <!-- Imagen adjunta (si tiene) -->
           {% if todo.image_url %}
-          <div class="shrink-0 cursor-pointer" onclick="viewFullImage('{{ todo.image_url }}', '{{ todo.title|escapejs }}')">
-            <img src="{{ todo.image_url }}" alt="{{ todo.title }}" class="w-14 h-14 object-cover rounded-xl border border-slate-200 shadow-sm hover:opacity-90 hover:scale-105 transition">
+          <div class="shrink-0 cursor-pointer" onclick="viewFullImage('{{ todo_image_url }}', '{{ todo.title|escapejs }}')">
+            <img src="{{ todo_image_url }}" alt="{{ todo.title }}" class="w-14 h-14 object-cover rounded-xl border border-slate-200 shadow-sm hover:opacity-90 hover:scale-105 transition">
           </div>
           {% endif %}
 
@@ -236,7 +240,7 @@
 
         <!-- Acciones: Editar y Eliminar -->
         <div class="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition">
-          <button onclick="openEditModal('{{ todo.id }}', '{{ todo.title|escapejs }}', '{{ todo.description|escapejs }}', '{{ todo.priority }}', '{{ todo.category|escapejs }}', '{{ todo.due_date|default:'' }}', '{{ todo.image_url|default:'' }}')" 
+          <button onclick="openEditModal('{{ todo.id }}', '{{ todo.title|escapejs }}', '{{ todo.description|escapejs }}', '{{ todo.priority }}', '{{ todo.category|escapejs }}', '{{ todo.due_date|default:'' }}', '{% if todo.image_url %}{{ todo_image_url }}{% endif %}')"
                   class="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition" title="Editar">
             <i data-lucide="edit-3" class="w-4 h-4"></i>
           </button>

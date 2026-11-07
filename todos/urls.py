@@ -8,6 +8,7 @@ urlpatterns = [
     path("todos/<int:todo_id>/toggle/", views.toggle_todo_view, name="toggle_todo"),
     path("todos/<int:todo_id>/update/", views.update_todo_view, name="update_todo"),
     path("todos/<int:todo_id>/delete/", views.delete_todo_view, name="delete_todo"),
+    path("todos/<int:todo_id>/image/", views.todo_image, name="todo_image"),
 
     # Autenticación (Logins)
     path("login/", views.login_view, name="login"),

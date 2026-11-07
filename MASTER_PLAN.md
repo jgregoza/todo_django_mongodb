@@ -1,11 +1,18 @@
 # MASTER_PLAN.md — Plan maestro de modernización de TaskPilot
 
 **Proyecto:** TaskPilot (nombre objetivo; el repositorio actual es `todo_django_mongodb`)
-**Estado:** Borrador para revisión y aprobación. **No autoriza implementación.**
+**Estado:** Actualizado con las decisiones D1–D9 y la validación técnica del 2026-11-06. **No autoriza implementación.**
 **Fecha:** 2026-11-06
-**Alcance:** diagnóstico, arquitectura, seguridad, identidad, Git, despliegue, documentación y fases.
+**Alcance:** diagnóstico, arquitectura, seguridad, identidad, Git, publicación, despliegue, limpieza y fases.
 
-> Este documento consolida las cuatro partes del análisis previo. Su existencia no implica autorización para ejecutar cambios. La implementación requiere aprobación explícita por fase y por entorno.
+> Este documento consolida el análisis previo, la validación técnica y las decisiones aprobadas. Su existencia no implica autorización para ejecutar cambios. La implementación requiere aprobación explícita por fase y por entorno. Cada gate es independiente.
+
+**Historial:**
+
+| Versión | Fecha | Cambio |
+|---|---|---|
+| v1 | 2026-11-06 | Borrador inicial (commit `ce351ee`) |
+| v2 | 2026-11-06 | Decisiones D1–D9, validación técnica, plan de publicación y limpieza por gates |
 
 ---
 
@@ -15,16 +22,19 @@ TaskPilot es una aplicación Django de gestión personal de tareas con prioridad
 
 La modernización busca:
 
-- Priorizar la corrección de acceso anónimo, autorización, CSRF y multimedia pública antes del renombrado y la limpieza de MongoDB.
-- Consolidar la identidad **TaskPilot** y eliminar referencias a MongoDB.
-- Corregir los graves problemas de autenticación, autorización, CSRF y privacidad de imágenes.
+- Corregir acceso anónimo, autorización, CSRF y multimedia pública antes del renombrado y del despliegue.
+- Consolidar la identidad **TaskPilot** y eliminar referencias y dependencias de MongoDB.
 - Validar entradas, archivos y errores; mejorar transacciones, logging y pruebas.
 - Documentar arquitectura, seguridad, entorno, despliegue, operación y recuperación.
-- Desplegar de forma limpia y reversible en PythonAnywhere, conservando datos y posibilitando rollback.
+- Desplegar TaskPilot desde cero en PythonAnywhere y retirar los dos proyectos anteriores mediante cuarentena y purga autorizada.
 
-**Decisión de arquitectura confirmada:** Django + SQLite + PythonAnywhere + Git. Sin MongoDB. Sin servicios de pago innecesarios.
+**Arquitectura confirmada:** Django 5.2.19 LTS + SQLite + PythonAnywhere (plan gratuito) + Git. Sin MongoDB. Sin servicios de pago.
 
-**Advertencia:** PythonAnywhere indica que SQLite no es recomendado como base de producción por depender del sistema de archivos. Se mantiene por decisión del proyecto, con bajo tráfico, un solo worker cuando la cuenta lo permita, timeout, operaciones cortas, respaldos y verificación de integridad. Las capacidades reales de la cuenta deben verificarse.
+**Decisión de datos:** base nueva y vacía. No se migran datos, usuarios ni multimedia de las aplicaciones anteriores. El backup existente se conserva hasta G7.
+
+**Decisión de limpieza:** Track A. Primero se aprovisiona y conmuta TaskPilot; solo después se pone en cuarentena el código antiguo durante 7 días y, tras la ventana, se purga con autorización independiente.
+
+**Advertencia:** PythonAnywhere no recomienda SQLite como base de producción por depender del sistema de archivos. Se acepta con bajo tráfico, un worker, `timeout`, operaciones cortas, backups y verificación de integridad.
 
 ---
 
@@ -34,42 +44,51 @@ La modernización busca:
 
 - Monolito Django con arquitectura MVT y una capa de servicios (`todos/services.py`).
 - Plantillas renderizadas en servidor; formularios HTML y una API JSON paralela.
-- Frontend con Tailwind CSS y Lucide por CDN.
+- Frontend con Tailwind CSS y Lucide por CDN; Google Fonts.
 - Autenticación nativa de Django con sesiones.
 - Admin de Django con filtros, badges e imágenes.
-- Funcionalidades presentes: CRUD de tareas, prioridades, categorías, fechas límite, imágenes, filtros, búsqueda, estadísticas, registro, login, logout, API y admin.
-- Persistencia real: SQLite (`db.sqlite3`) a través de Django ORM.
-- MongoDB: configuración y módulo `todos/db.py` presentes, pero nunca inicializados ni utilizados. Dependencias `pymongo`, `mongoengine` y `dnspython` sin uso real.
+- Funcionalidades: CRUD de tareas, prioridades, categorías, fechas límite, imágenes, filtros, búsqueda, estadísticas, registro, login, logout, API y admin.
+- Persistencia real: SQLite (`db.sqlite3`) a través del Django ORM.
+- MongoDB: configuración y módulo `todos/db.py` presentes, pero nunca inicializados ni utilizados. `todos/db.py` no lo importa ningún otro módulo. Dependencias `pymongo`, `mongoengine` y `dnspython` sin uso real.
 
-### 2.2 Línea base verificada
+**Hallazgo de despliegue:** el dominio `jzamora.pythonanywhere.com` sirve actualmente el proyecto `sample-web-personal-django2` porque el WSGI vivo importa `webpersonal.settings`. El *source* configurado en la Web App apunta a `todo_django_mongodb`, por lo que source y WSGI están desalineados.
+
+### 2.2 Línea base local verificada
 
 | Área | Estado |
 |---|---|
 | Python local | 3.12.10 |
-| Django instalado | 6.1.2 |
+| Django instalado | 6.1.2 (no ejecutable en PythonAnywhere) |
 | Pillow / python-dotenv | 13.0.0 / 1.2.4 |
 | Base local | 20 migraciones, 4 tareas, 0 usuarios |
 | Multimedia local | No existe `media/`; se crea al subir imágenes |
-| Estáticos | `static/` vacío; `staticfiles/` generado e ignorado |
+| Estáticos | `static/` vacío y no versionado; `staticfiles/` generado e ignorado |
 | Pruebas | 7 pruebas básicas, sin autorización, CSRF ni uploads |
 | CI/CD | No existe |
-| Documentación | Solo README y guía antigua de PythonAnywhere |
+| Documentación | README, guía antigua de PythonAnywhere y este plan |
+
+**Advertencia sobre la base local y la migración `0003`:** la base local contiene 4 tareas huérfanas y 0 usuarios. No debe utilizarse directamente para validar `0003`, porque la migración hará obligatorio `user` y fallaría con esas filas. La migración se validará desde una **base SQLite temporal y limpia**, aplicando `0001`, `0002` y `0003` en orden.
+
+- La base de producción será nueva y vacía; no se migrarán datos.
+- No se asignarán propietarios artificiales a las tareas locales.
+- No se eliminará ni sustituirá la base local existente ni sus datos.
+- Cualquier sustitución o eliminación de la base local requiere una instrucción independiente.
 
 ### 2.3 Git
 
 - Rama local y remota única: `main`.
-- Sin tags.
-- Dos commits; `HEAD` local y remoto en `01eb960`.
 - `origin`: `https://github.com/jgregoza/todo_django_mongodb.git`.
-- `main` sin upstream configurado.
-- Árbol de trabajo limpio; 28 archivos versionados.
-- Sin submódulos, LFS ni ramas adicionales.
+- Remoto `main` = `01eb960` (código legado, 28 archivos, sin `MASTER_PLAN.md`).
+- Local `main` = `ce351ee` = `01eb960` + `MASTER_PLAN.md`; un commit por delante del remoto.
+- Sin tags, releases, ramas adicionales, submódulos ni LFS.
+- Repositorio público; 0 colaboradores; sin Actions, secrets, webhooks ni branch protection.
+- `main` local sin upstream configurado.
+- Árbol limpio; 28 archivos versionados en `01eb960`.
 - `.env` existe, está ignorado y no está versionado.
 - `db.sqlite3`, `.venv/`, `staticfiles/`, `media/` y `__pycache__/` están ignorados.
-- No se detectaron tokens, claves privadas, bases de datos ni multimedia en el historial con los patrones revisados.
-- Sí existe una `SECRET_KEY` de respaldo hardcodeada en `config/settings.py` en ambos commits; debe rotarse y eliminarse el fallback.
-- El nombre y correo del autor son visibles en los commits; no se recomienda reescribir historia solo por ello.
-- Verificar en GitHub si el repositorio es público o privado.
+- No se detectaron tokens, claves privadas, bases ni multimedia en el historial con los patrones revisados.
+- Existe una `SECRET_KEY` de respaldo hardcodeada en `config/settings.py`; debe rotarse y eliminarse el fallback.
+- El nombre y correo del autor son visibles en los commits; no se reescribe historia por ello.
 
 ### 2.4 Hallazgos críticos
 
@@ -79,6 +98,7 @@ La modernización busca:
 | Crítica | Usuarios anónimos pueden editar, alternar o eliminar cualquier tarea por ID |
 | Crítica | API pública, sin autenticación obligatoria y con `csrf_exempt` |
 | Crítica | Multimedia potencialmente pública si se mantiene el mapping `/media/` |
+| Crítica | Django 6.1.2 no puede ejecutarse en Python 3.10 |
 | Alta | Tareas sin propietario compartidas entre usuarios |
 | Alta | `SECRET_KEY` con fallback hardcodeado |
 | Alta | `DEBUG=True` y `ALLOWED_HOSTS=*` por defecto |
@@ -89,33 +109,72 @@ La modernización busca:
 | Media | Sin manejo de errores ni logging estructurado |
 | Media | Sin paginación |
 | Media | SQLite sin timeout ni configuración de bloqueo |
+| Media | `STATICFILES_DIRS` apunta a `static/`, que no se versiona |
 | Baja | Registro abierto sin límite de intentos |
 
-### 2.5 Datos que deben verificarse
+### 2.5 Entorno de PythonAnywhere verificado
 
-- Plan real de PythonAnywhere, sistema operativo/imagen, versión de Python, rama US/EU y dominio.
-- Cuotas reales: almacenamiento, CPU, workers, consolas, tareas programadas, SSH/SFTP y límites de backup.
-- Herramientas disponibles en la cuenta (`sqlite3`, `tar`, `gpg` u `openssl`, `sha256sum`, `git`, activación de venv).
-- Rutas reales del proyecto, virtualenv, WSGI, logs, `.env`, base y multimedia.
-- Mappings de estáticos y multimedia.
-- Existencia, tamaño y permisos de `media/`; espacio libre para backups.
-- Número real de usuarios, tareas, tareas huérfanas y archivos multimedia en producción.
-- Visibilidad del repositorio en GitHub.
-- Claves reales presentes en `.env` (solo nombres, nunca valores).
-- Existencia, restaurabilidad y capacidad de descarga externa de backups actuales.
-- Estado real de HTTPS y certificados.
+| Capacidad / restricción | Estado real |
+|---|---|
+| Plan | Gratuito: 1 Web App, 1 worker, 2 consolas, 512 MB, 100 CPU-s/día |
+| Python disponible | 3.6, 3.7, 3.8, 3.9 y 3.10; **máximo 3.10** |
+| Python del venv actual | 3.10.5; pip 22.0.4 |
+| SQLite | 3.31.1 (mínimo de Django 5.2: 3.31.0) |
+| Dominio | `jzamora.pythonanywhere.com` (se conserva) |
+| HTTPS / Force HTTPS | Desactivado |
+| WSGI | `/var/www/jzamora_pythonanywhere_com_wsgi.py` (515 B) |
+| SSH/SFTP | No disponibles en Free |
+| Git por HTTPS | Permitido; repositorio público |
+| Herramientas | `sqlite3`, `tar`, `gzip`, `sha256sum`, `git`, `du`, `df`, `find`, `stat`, `gpg`, `openssl`, `mkvirtualenv` |
+| Almacenamiento | 309 MB usados de 512 MB; 966 GB libres en el montaje (manda la cuota del plan) |
+| Proyecto TODO | 8.7 MB: `.git` 504 KB, `media` 6.1 MB, `staticfiles` 1.8 MB, `db.sqlite3` 139,264 B |
+| Proyecto blog | 30 MB (solo se inspeccionó el nivel superior) |
+| Venv `todo-env` | 99 MB, Python 3.10.5 |
+| Venv `webpersonal` | 92 MB, Python 3.9.13 |
+| Mappings actuales | `/static/` → `todo_django_mongodb/staticfiles`; `/media/` → `todo_django_mongodb/media`; `/static/` → `sample-web-personal-django2/webpersonal/static` |
+| Source / working dir / venv | `todo_django_mongodb` / `/home/jzamora/` / `todo-env` |
+| `/var/www/__pycache__` | `cpython-39` y `cpython-310` del WSGI |
+| Logs | Sin tracebacks; solo 404 de estáticos y `/favicon.ico` |
+
+### 2.6 Base de producción verificada
+
+| Dato | Valor |
+|---|---|
+| Integridad | `ok` |
+| `journal_mode` | `delete` |
+| Migraciones aplicadas | 20 |
+| Usuarios | 1 |
+| Tareas | 8 (todas huérfanas: `user IS NULL`) |
+| Medios | 3 archivos |
+| Estáticos generados | 127 archivos |
+| Permisos de `db.sqlite3` | `644` |
+| Permisos de `.env` | `664` (debería ser `600`) |
+| Claves de `.env` | 5 (solo se registraron nombres) |
 
 **No asumir que la base local representa producción.**
+
+### 2.7 Backup ejecutado y verificado
+
+| Dato | Valor |
+|---|---|
+| Ruta | `/home/jzamora/backups/20261107T013845Z` |
+| Fecha UTC | 2026-11-07T01:38:45Z |
+| Tamaño | 6.6 MB |
+| Archivos | 23 (base, código, media, estáticos, WSGI, metadatos) |
+| Checksums | 22/22 `OK` |
+| Restauración | `integrity_check=ok`; `auth_user=1`, `todos_todotask=8`, `django_migrations=20`; media 3 archivos; staticfiles 127 |
+| `.env` | Solo nombres, tamaño y permisos; **sin contenido** |
+| Retención | Hasta G7 |
 
 ---
 
 ## 3. Decisiones
 
-### 3.1 Decisiones acordadas o confirmadas conceptualmente
+### 3.1 Decisiones acordadas
 
 - Backend Django.
 - Base de datos SQLite.
-- Hosting PythonAnywhere.
+- Hosting PythonAnywhere, plan gratuito.
 - Control de versiones Git.
 - OpenCode como asistente de desarrollo.
 - **No implementar MongoDB.**
@@ -123,35 +182,44 @@ La modernización busca:
 - Priorizar seguridad, calidad, documentación y despliegue reproducible.
 - No implementar nada hasta aprobar este plan maestro y cada fase.
 
-### 3.2 Identidad objetivo
+### 3.2 Identidad y layout objetivo
 
 - Producto: **TaskPilot**.
-- Repositorio propuesto: **`taskpilot-django`**.
-- Directorio de despliegue propuesto: `taskpilot`.
-- Virtualenv propuesto: `taskpilot-env`.
-- El renombrado real requiere aprobación específica (Gate G2) y se ejecuta en F2, después de F1 (seguridad), salvo repriorización explícita.
+- Repositorio objetivo: **`taskpilot-django`** (renombrado después del despliegue).
+- Directorio de código: `/home/jzamora/taskpilot`.
+- Directorio de datos: `/home/jzamora/taskpilot-data` (`db.sqlite3` y `media/`).
+- Estáticos: `/home/jzamora/taskpilot/staticfiles` (dentro del proyecto, ignorado por Git).
+- Virtualenv: `/home/jzamora/.virtualenvs/taskpilot-env`.
+- Base de datos: nueva, vacía, creada con `migrate`.
+- Dominio y Web App existentes: se conservan.
+- Paquete `config`, app `todos`, modelo `TodoTask` y tablas `todos_todotask`: no se renombran.
 
-### 3.3 Recomendaciones y decisiones pendientes de aprobación
+### 3.3 Decisiones aprobadas D1–D9
 
-1. **Identidad TaskPilot (G2):** adoptar el nombre y renombrar el repositorio a `taskpilot-django`, después de F1 (seguridad).
-2. **Etiquetas internas:** mantener `config` y `todos` para no tocar migraciones.
-3. **Multimedia privada:** sin mapping público `/media/`; servir solo con autorización.
-4. **API de sesión con CSRF:** sin API pública ni DRF en esta etapa.
-5. **SQLite:** aceptar el riesgo documentado y sus mitigaciones (timeout, un solo worker cuando la cuenta lo permita, backups, integridad).
-6. **PythonAnywhere:** verificar en la cuenta real plan, cuotas, herramientas, almacenamiento y dominio antes de aceptar el plan gratuito; no tratar los datos públicos como garantía.
-7. **Retención de backups y releases:** 7, 30 o 90 días.
-8. **Cifrado y destino del backup:** elegir GPG u OpenSSL, definir almacenamiento externo, responsable y custodia; el `.env` externo debe estar cifrado.
-9. **Prueba de restauración:** definir frecuencia, responsable y evidencia; ningún backup es válido sin prueba.
-10. **Rollback con escrituras nuevas:** aprobar la política de congelar, exportar y reconciliar datos; no restaurar a ciegas.
-11. **Django:** mantener 6.1.2 durante la modernización y evaluar LTS en una fase separada.
-12. **Herramientas opcionales:** `ruff`, `coverage` y CI.
-13. **Tareas huérfanas:** identificar, proponer y aprobar un propietario antes de la migración; no asignar automáticamente.
-14. **Rotación de secretos:** política de `SECRET_KEY` y credenciales.
-15. **Alcance de F0:** confirmar que G0 solo autoriza inventario; backup, tag y bundle requieren G0-B, G0-T y G0-U.
+| ID | Decisión | Estado |
+|---|---|---|
+| **D1** | Django **5.2.19** + Python 3.10. Se acepta y documenta temporalmente el riesgo de Python 3.10 EOL. | Aprobada |
+| **D2** | Layout `/home/jzamora/taskpilot` + `/home/jzamora/taskpilot-data`; `staticfiles` dentro del proyecto. | Aprobada |
+| **D3** | Conservar migraciones `0001` y `0002`; crear `0003` para hacer obligatorio `user`. | Aprobada |
+| **D4** | Cuarentena de **7 días**. | Aprobada |
+| **D5** | Conservar el backup `20261107T013845Z` hasta G7; no crear otro. | Aprobada |
+| **D6** | Eliminar `/var/www/__pycache__` en G6-L, solo tras verificar su contenido. | Aprobada |
+| **D7** | Base de datos nueva y vacía. | Aprobada |
+| **D8** | Renombrar el repositorio GitHub **después** del despliegue. | Aprobada |
+| **D9** | G6-P, G6, G6-L y G7 mantienen autorización independiente. | Aprobada |
 
-### 3.4 Datos aún no verificados
+### 3.4 Decisiones todavía abiertas
 
-Los indicados en la sección 2.5, incluidas las cuotas, herramientas y capacidades reales de PythonAnywhere.
+1. Fecha y ventana concreta para G6.
+2. Si el backup se elimina en G7 o se conserva más tiempo.
+3. Nombre final y momento exacto del renombrado GitHub (posterior a G6).
+4. Vendorizar Tailwind/Lucide/Fonts en una fase posterior (no bloquea v1).
+5. Activar “Force HTTPS” en el panel: se hará en la misma ventana que G6.
+
+### 3.5 Datos aún no verificados
+
+- Contenido interno de `sample-web-personal-django2` (solo se inspeccionó el nivel superior; se eliminará completo).
+- Contenido exacto de `/var/www/__pycache__` antes de retirarlo (se verificará en G6-L).
 
 ---
 
@@ -161,58 +229,59 @@ Los indicados en la sección 2.5, incluidas las cuotas, herramientas y capacidad
 
 **Renombrar:** producto, repositorio, carpeta raíz, documentación, marca visible, rutas de despliegue y virtualenv.
 
-**No renombrar en F2:** paquete `config`, app `todos`, modelo `TodoTask`, tablas `todos_todotask` ni historial de migraciones. Renombrar la app o el modelo obliga a tocar migraciones, `contenttypes`, permisos e imports, con riesgo alto y beneficio cosmético.
+**No renombrar:** paquete `config`, app `todos`, modelo `TodoTask`, tablas `todos_todotask` ni historial de migraciones. Renombrar la app o el modelo obliga a tocar migraciones, `contenttypes`, permisos e imports, con riesgo alto y beneficio cosmético.
 
 ### 4.2 Lugares afectados
 
 - Carpeta local y workspace.
 - Remoto `origin` y `.git/config`.
-- Repositorio GitHub.
-- `README.md` (título, árbol y URL absoluta `file:///C:/Users/...`).
-- `PYTHONANYWHERE_DEPLOY.md` (clon, `cd`, rutas de source, estáticos y multimedia).
-- `pythonanywhere_wsgi.py` (comentario de ruta).
-- Pestaña Web de PythonAnywhere: source, working dir, venv, WSGI, mappings.
-- Virtualenv `todo-env`.
+- Repositorio GitHub (después del despliegue).
+- `README.md` y `PYTHONANYWHERE_DEPLOY.md` (rutas, stack y comandos).
+- `pythonanywhere_wsgi.py` (ruta absoluta).
+- Pestaña Web: source, working dir, venv, WSGI y mappings.
+- Virtualenv `todo-env` → `taskpilot-env`.
 - Plantillas: “TODO Pro”, “TODO List Pro”.
 - `todos/models.py` (docstring).
 - `config/settings.py` y `.env.example`: bloques `MONGO_*`.
 - `requirements.txt`: dependencias Mongo.
 - `todos/db.py`.
 
-### 4.3 Procedimiento de renombrado (F2, Gate G2)
+### 4.3 Publicación del código correcto
 
-Este procedimiento se ejecuta después de F1 (seguridad) y de la aprobación G2.
+**Regla:** GitHub solo contiene hoy el código legado (`01eb960`). Nunca se desplegará ese commit como TaskPilot. La publicación se hace después de F1–F5 y de la auditoría independiente, con fast-forward y tag anotado.
 
-1. Aprobar nombre y alcance (G2).
-2. Confirmar árbol limpio y backup verificado (G0-B).
-3. Crear tag local (G0-T) y bundle local (G0-U) solo con autorización específica; G0 no los autoriza.
-4. Renombrar el repositorio en GitHub (G2).
-5. Actualizar `origin`, hacer `fetch` y configurar upstream (G2).
-6. Renombrar la carpeta local (G2).
-7. Actualizar documentación, plantillas, WSGI y `.env.example` (G2).
-8. Eliminar MongoDB y dependencias (G2).
-9. Verificar `check`, pruebas y `makemigrations --check` (G2).
-10. Hacer commits pequeños (G2).
-11. Actualizar el clon y la configuración de PythonAnywhere solo en F6, con autorización de producción; G2 no autoriza producción.
-12. Conservar el despliegue anterior para rollback.
+1. Implementar F1–F5 en `main` mediante commits pequeños.
+2. Ejecutar la auditoría independiente (§8.4) y resolver los hallazgos.
+3. Verificar antes del push:
+   - `git log --all -- .env` vacío.
+   - `git grep` de `SECRET_KEY`, `MONGO_URI` y `password` sin valores reales.
+   - `git status` limpio y pruebas en verde.
+4. `git push origin main`: fast-forward de `01eb960` al nuevo tip; incluye `ce351ee`. **Sin `--force` y sin reescribir historia.**
+5. Crear tag anotado en el commit desplegable:
+   - `git tag -a v1.0.0 -m "TaskPilot 1.0.0"`
+   - `git push origin v1.0.0`
+6. Desplegar en PythonAnywhere haciendo checkout de `v1.0.0` (requiere G6-P y G6; G5-P no autoriza el despliegue).
+7. Renombrar el repositorio a `taskpilot-django` **después** de G6, con autorización específica (G2-GH). GitHub redirige la URL antigua; actualizar `origin` y la documentación.
+
+**Prohibido:** desplegar `01eb960`, hacer force push, recrear el repositorio o perder el historial.
 
 ### 4.4 Git
 
 - Conservar historial; no hacer `force push` ni reescribir pasado.
 - Commits convencionales y pequeños.
 - Ramas cortas por fase: `chore/`, `feat/`, `fix/`, `docs/`, `security/`.
-- No crear tags, bundles ni ramas hasta autorización; el tag local requiere G0-T y el bundle local requiere G0-U.
+- El tag de despliegue `v1.0.0` se crea y publica bajo G5-P.
+- Los tags/bundles locales de F0 siguen requiriendo G0-T/G0-U; no se ejecutaron.
 - Revisar `.gitignore`: `.env`, `.env.*` con excepción `.env.example`, `.venv/`, `db.sqlite3`, `media/`, `staticfiles/`, `__pycache__/`, logs, `backups/`, `.coverage`, `htmlcov/`, `.ruff_cache/`.
 - No ignorar migraciones ni documentación.
+- `static/` no se versiona, salvo un `.gitkeep` si se conserva `STATICFILES_DIRS`; las plantillas usan CDN.
 
 ### 4.5 Secretos
 
 - Rotar la `SECRET_KEY` actual por estar el fallback en el historial.
 - Sin fallback en producción: si falta, fallar de forma explícita.
-- `.env` con permisos `600`, fuera de Git y de directorios públicos.
-- La copia externa del `.env` debe estar cifrada; la passphrase o clave se guarda fuera del backup.
-- Verificar descifrado y checksum sin imprimir valores.
-- Documentar ubicación y rotación, nunca valores.
+- `.env` nuevo en `/home/jzamora/taskpilot/.env`, permisos `600`, fuera de Git.
+- Sin claves `MONGO_URI` ni `MONGO_DB_NAME`.
 - No incluir credenciales en Markdown, commits, logs ni chat.
 - GitHub: 2FA, token de mínimo privilegio y rotación.
 - PythonAnywhere: 2FA, contraseña robusta, consolas no compartidas.
@@ -225,9 +294,12 @@ Este procedimiento se ejecuta después de F1 (seguridad) y de la aprobación G2.
 
 - Denegar por defecto; solo login y registro son públicos.
 - Cada tarea pertenece a un usuario.
-- Toda vista y API exige autenticación.
-- Objetos ajenos responden 404.
-- CSRF obligatorio en toda escritura.
+- Toda vista web y todo endpoint API exige autenticación, con respuestas diferentes:
+  - Las **vistas web** pueden redirigir al login.
+  - Los **endpoints API** deben devolver `401` con JSON, sin redirección HTML.
+  - No se usará `login_required` en endpoints API si provoca redirecciones HTML.
+- Objetos ajenos responden 404 (o el código definido en la matriz).
+- CSRF obligatorio en toda escritura, incluida la API; sin `csrf_exempt`.
 - Logout solo por POST.
 - Multimedia privada servida por Django tras comprobar propietario.
 - Validación de entradas y archivos en servidor.
@@ -241,267 +313,275 @@ Este procedimiento se ejecuta después de F1 (seguridad) y de la aprobación G2.
 |---|---|---|---|---|
 | `/` | Login | Sus tareas | Sus tareas | Sus tareas |
 | Crear | Login | Propia | Propia | Propia |
-| Tarea de A | 404/401 | Permitido | 404 | Admin |
+| Tarea de A | 302 login / 404 | Permitido | 404 | Admin |
 | API | 401 JSON | Solo suyas | Solo suyas | Solo suyas |
-| Imagen de A | 401/404 | Permitido | 404 | Admin |
+| Imagen de A | 302 login / 404 | Permitido | 404 | Admin |
 | `/admin/` | Login | Denegado | Denegado | Permitido |
 | Logout | No aplica | POST + CSRF | POST + CSRF | POST + CSRF |
 
-### 5.3 Cambios de seguridad
+Las rutas web pueden redirigir al login; las rutas API responden `401 JSON`. La matriz no autoriza redirecciones HTML en API.
 
-- Añadir `login_required` a vistas y un decorador JSON para API.
-- Filtrar siempre por `request.user`; eliminar `Q(user__isnull=True)`.
-- Usar `get_object_or_404` con queryset filtrado.
-- Asignar tareas huérfanas solo con propietario aprobado y trazable (`assign_orphan_tasks --owner ... --dry-run`); migrar `user` a `null=False` después de verificar.
-- Actualizar `seed_data.py` para exigir propietario.
-- Eliminar `csrf_exempt`; API con `X-CSRFToken`.
-- Logout `@require_POST` y formulario CSRF.
-- Proteger multimedia y retirar mapping público `/media/`.
-- Rotar `SECRET_KEY`.
-- Endurecer producción: `DEBUG=False`, hosts exactos, `CSRF_TRUSTED_ORIGINS`, cookies seguras, `nosniff`, `X-Frame-Options`, referrer policy, HTTPS.
-- Validar imágenes: tamaño máximo, JPEG/PNG/WebP, verificación Pillow, re-codificación, límite de píxeles, UUID, permisos, sin SVG/HTML.
-- Usar transacciones y borrar archivos antiguos tras commit.
-- Implementar `cleanup_orphan_media --dry-run`.
-- SQLite con timeout, evaluación de WAL y operaciones cortas.
-- Logging de seguridad y errores sin secretos.
-- Páginas 400/403/404/500.
+### 5.3 Cambios de seguridad y configuración
 
-### 5.4 Política de tareas huérfanas y migración de datos
+**`config/settings.py`:**
 
-1. **Inventario:** listar tareas con `user IS NULL`; incluir ID, título, fecha, estado e imagen; no modificar.
-2. **Propuesta:** el responsable funcional propone un propietario por tarea o un criterio de asignación.
-3. **Aprobación:** el propietario del proyecto aprueba explícitamente la lista o el criterio, con referencia trazable (ticket, correo o registro). Sin aprobación no se migra.
-4. **Backup:** backup verificado antes de cualquier escritura.
-5. **Dry-run:** ejecutar `assign_orphan_tasks --owner <usuario> --dry-run` y revisar el resultado.
-6. **Asignación:** ejecutar sin dry-run solo con la aprobación y el backup.
-7. **Verificación:** confirmar cero tareas huérfanas y conteos correctos.
-8. **Código estricto:** desplegar `null=False` solo después de la asignación verificada.
-9. **Post-check:** probar aislamiento; si falla, rollback según 6.8.
+- `DATA_DIR = Path(os.getenv("DATA_DIR", str(BASE_DIR)))`.
+- `DATABASES["default"]["NAME"] = DATA_DIR / "db.sqlite3"`.
+- `OPTIONS = {"timeout": 20}`; sin WAL (almacenamiento de red).
+- `MEDIA_ROOT = DATA_DIR / "media"`.
+- `STATIC_ROOT = Path(os.getenv("STATIC_ROOT", str(BASE_DIR / "staticfiles")))`.
+- Eliminar `STATICFILES_DIRS` (o añadir `static/.gitkeep`).
+- Eliminar `MONGO_URI` y `MONGO_DB_NAME`.
+- `SECRET_KEY` solo desde entorno; fallar si falta con `DEBUG=False`.
+- `DEBUG=False` por defecto.
+- `ALLOWED_HOSTS` desde entorno; sin `"*"` en producción.
+- Bloque `if not DEBUG:` con `SECURE_SSL_REDIRECT`, `SESSION_COOKIE_SECURE`, `CSRF_COOKIE_SECURE`, HSTS, `SECURE_CONTENT_TYPE_NOSNIFF`, `X_FRAME_OPTIONS="DENY"`, `SECURE_PROXY_SSL_HEADER=("HTTP_X_FORWARDED_PROTO", "https")` y `CSRF_TRUSTED_ORIGINS=["https://jzamora.pythonanywhere.com"]`.
 
-No asignar automáticamente a admin, staff, al primer usuario ni a una tarea genérica. La aprobación del propietario debe quedar registrada antes de ejecutar la migración.
+**Multimedia privada:**
+
+- `todos/models.py`: `to_dict()` no usa `self.image.url`; devuelve la URL de la vista privada o se elimina del serializer.
+- `todos/views.py`: vista `todo_image` con `@login_required`, `get_object_or_404` y autorización por propietario o staff; `FileResponse` sin exponer la ruta.
+- `config/urls.py`: eliminar el `static(settings.MEDIA_URL, ...)`; añadir la ruta privada.
+- `todos/admin.py`: `image_preview` apunta a la vista privada.
+- `templates/todos/index.html`: usar `{% url 'todo_image' todo.id %}`.
+
+**Autorización y API:**
+
+- `@login_required` solo en vistas web, donde la redirección al login es aceptable.
+- Endpoints API con un decorador propio que devuelva `401` y JSON; **no** usar `login_required` en API.
+- Operaciones de escritura de la API con CSRF; prohibido `csrf_exempt`.
+- Objetos ajenos: `404` (o el código ya definido en la matriz).
+- Logout `@require_POST` con CSRF.
+- `todos/services.py`: eliminar `Q(user__isnull=True)`; filtrar estrictamente por `request.user`.
+- `todos/models.py`: `user` pasa a `null=False`; crear `0003` (D3).
+- `0003` se valida sobre una base SQLite temporal y limpia (`0001` → `0002` → `0003`), nunca sobre la base local con tareas huérfanas. No se asignan propietarios artificiales ni se borra la base local.
+
+**Limpieza:**
+
+- Borrar `todos/db.py`.
+- `requirements.txt` con pines exactos (sección 6.10).
+- Actualizar `README.md` y `PYTHONANYWHERE_DEPLOY.md`.
+- `seed_data.py` solo para desarrollo; no ejecutar en producción.
+
+### 5.4 Política de tareas huérfanas
+
+La base de producción de TaskPilot será nueva y vacía (D7). Por tanto, **no hay tareas huérfanas que migrar en producción**.
+
+- Las tareas huérfanas actuales pertenecen a la aplicación anterior y no se conservan.
+- La política de asignación queda limitada a desarrollo y datos de ejemplo.
+- `seed_data.py` deberá exigir propietario.
+- Si en el futuro se importaran datos, se aplicará el procedimiento de propietario aprobado y trazable antes de migrar.
+- No asignar automáticamente a admin, staff, al primer usuario ni a una tarea genérica.
+
+**Base local:** contiene tareas huérfanas y no sirve para validar `0003`. La validación se hará en una base temporal limpia. No se asignarán propietarios artificiales, no se borrará la base local y no se sustituirá sin una instrucción independiente.
 
 ---
 
 ## 6. PythonAnywhere
 
-### 6.1 Restricciones y capacidades de PythonAnywhere (pendientes de verificación)
+### 6.1 Restricciones y capacidades verificadas
 
-Los datos de esta sección son referencias públicas, no garantías permanentes. Deben verificarse en la cuenta real antes de F0.2 y F6: plan contratado, cuotas, herramientas, almacenamiento, sistema operativo, versión de Python, dominio, SSH/SFTP, tareas programadas, workers, consolas, CPU y límites de backup. Si difieren, el plan y la aceptación de riesgos se actualizan.
+Los datos siguientes se verificaron en la cuenta real y sustituyen a las referencias públicas.
 
-| Capacidad / restricción | Referencia pública | Estado real |
-|---|---|---|
-| Plan contratado y cuotas | Free: 1 web app, 1 worker, 2 consolas, 512 MB, 100 CPU-s/día | Pendiente de verificación |
-| SSH/SFTP y tareas programadas | No disponibles en Free, según referencia | Pendiente de verificación |
-| Dominio | `<usuario>.pythonanywhere.com`; dominio propio requiere pago | Pendiente de verificación |
-| Sistema operativo y Python | Varía por cuenta/imagen | Pendiente de verificación |
-| WSGI | `/var/www/<usuario>_pythonanywhere_com_wsgi.py` | Pendiente de verificación |
-| Git por HTTPS | Permitido; repositorio privado requiere token de solo lectura | Pendiente de verificación |
-| Herramientas | `sqlite3`, `tar`, `gpg` u `openssl`, `sha256sum`, `git`, activación de venv | Pendiente de verificación |
-| Almacenamiento de backups | Espacio libre y posibilidad de descarga externa | Pendiente de verificación |
-| `media/` | Existencia, tamaño y permisos | Pendiente de verificación |
-| HTTPS / Force HTTPS | Disponible según referencia | Pendiente de verificación |
-| SQLite | Disponible, pero no recomendado para producción según referencia | Pendiente de verificación |
+| Capacidad / restricción | Estado real |
+|---|---|
+| Plan y cuotas | Free: 1 Web App, 1 worker, 2 consolas, 512 MB, 100 CPU-s/día |
+| SSH/SFTP | No disponibles |
+| Tareas programadas | No disponibles en Free |
+| Dominio | `jzamora.pythonanywhere.com` |
+| Python | 3.6–3.10; máximo 3.10 |
+| SQLite | 3.31.1 |
+| WSGI | `/var/www/jzamora_pythonanywhere_com_wsgi.py` |
+| Git por HTTPS | Permitido |
+| Herramientas | `sqlite3`, `tar`, `gzip`, `sha256sum`, `git`, `du`, `df`, `find`, `stat`, `gpg`, `openssl`, `mkvirtualenv` |
+| Almacenamiento | 309 MB usados de 512 MB |
+| HTTPS | Desactivado; se activará en G6 |
+| Consolas | 2; dejar una libre para la ventana |
 
-No se asume ninguna cuota, herramienta ni capacidad como garantía hasta verificarla en la cuenta real.
+### 6.2 Free vs. pago
 
-### 6.2 Free vs. pago (condicionado a verificación)
+Con la información verificada, las funciones actuales no requieren plan de pago. Dominio propio, SSH/SFTP, más workers, tareas programadas o MySQL requerirían pago. El proyecto se mantiene en el plan gratuito.
 
-Con la información pública disponible, las funciones actuales no requieren plan de pago. Esto debe confirmarse en la cuenta real antes de aceptar el riesgo. Dominio propio, SSH/SFTP, más workers, tareas programadas o MySQL pueden requerir pago. El nombre TaskPilot no cambia la URL gratuita según la referencia pública, pero la URL y el dominio deben verificarse.
-
-### 6.3 Estructura de despliegue propuesta
+### 6.3 Estructura de despliegue
 
 ```text
-/home/<usuario>/apps/taskpilot/
-├── releases/
-│   └── <timestamp>/
-└── current -> releases/<timestamp>
+/home/jzamora/taskpilot/            # código, .git, .env, staticfiles/
+├── manage.py
+├── config/
+├── todos/
+├── templates/
+├── staticfiles/                    # collectstatic (ignorado)
+└── .env                            # 600, ignorado
 
-/home/<usuario>/apps/taskpilot-data/
+/home/jzamora/taskpilot-data/       # datos persistentes
 ├── db.sqlite3
-└── media/
-
-/home/<usuario>/apps/taskpilot-static/
+└── media/                          # privado, sin mapping
 ```
 
-- Datos fuera de las releases para no perderlos al desplegar.
-- `DATA_DIR` y `STATIC_ROOT` por variable de entorno.
-- WSGI apunta a `current`.
-- Estáticos en ruta fija.
-- Multimedia privada sin mapping público.
-- Las rutas, mappings y permisos reales deben verificarse en la cuenta antes de F6; esta estructura es una propuesta.
+- Variables: `DATA_DIR=/home/jzamora/taskpilot-data`, `STATIC_ROOT=/home/jzamora/taskpilot/staticfiles`.
+- `MEDIA_ROOT=$DATA_DIR/media`; sin mapping `/media/`.
+- WSGI apunta a `/home/jzamora/taskpilot`.
+- El código se despliega por tag (`v1.0.0`), no por `main` móvil.
+- No se usa estructura `releases/` + `current` en esta versión.
 
-### 6.4 Respaldo (requiere G0-B)
+### 6.4 Backup (completado, G0-B)
 
-No ejecutar este procedimiento sin autorización explícita de backup. Si el backup es de producción, indicar ventana y alcance. El backup es una escritura: crea archivos y consume almacenamiento, aunque no modifica la aplicación ni la base. Los comandos siguientes son una plantilla: adaptar rutas y mecanismo de virtualenv a lo verificado en la cuenta. No guardar la passphrase de cifrado en el backup, el repositorio ni la documentación. Ajustar `OLD`, la ruta del WSGI y el virtualenv a los valores reales verificados; no asumir `todo_django_mongodb` ni `todo-env` después de un renombrado.
+El backup ya fue creado y verificado; **no se crea otro** (D5).
 
-#### 6.4.1 Preflight de herramientas y alcance
+| Dato | Valor |
+|---|---|
+| Ruta | `/home/jzamora/backups/20261107T013845Z` |
+| Tamaño | 6.6 MB |
+| Checksums | 22/22 `OK` |
+| Restauración | Base `ok` (1 usuario, 8 tareas, 20 migraciones), media 3, estáticos 127 |
+| `.env` | Solo nombres y metadatos; sin contenido |
+| Retención | Hasta G7 |
 
-Verificar en la cuenta real antes de depender de ellas:
+Correcciones aplicadas respecto al borrador anterior:
 
-- `sqlite3`, `tar`, `sha256sum` y `git`.
-- `gpg` u `openssl` para cifrar `.env`.
-- Mecanismo real de activación del virtualenv (`workon`, ruta absoluta o `source`).
-- Existencia de `db.sqlite3`, `.env` y WSGI; presencia o ausencia de `media/`.
-- Espacio libre suficiente para el backup y la copia externa.
+- La tabla real es `todos_todotask`.
+- `journal_mode=delete`.
+- `~/backups` no existía y se creó con permisos `700`.
+- El bug de `sha256sum "$BK"/* > "$BK/SHA256SUMS"` (autoinclusión) se corrigió generando la lista sin el propio archivo.
 
-```bash
-set -euo pipefail
+El backup se usa solo si se necesita rollback. No se dedica más trabajo a copias externas.
 
-for t in sqlite3 tar sha256sum git; do
-  command -v "$t" >/dev/null 2>&1 || { echo "FALTA: $t"; exit 1; }
-done
+### 6.5 Rollback
 
-if command -v gpg >/dev/null 2>&1; then
-  ENC="gpg"
-elif command -v openssl >/dev/null 2>&1; then
-  ENC="openssl"
-else
-  echo "FALTA: gpg u openssl para cifrar .env"
-  exit 1
-fi
+El rollback es de **configuración**, no de datos:
 
-OLD="$HOME/todo_django_mongodb"
-[ -f "$OLD/db.sqlite3" ] || { echo "FALTA: db.sqlite3"; exit 1; }
-[ -f "$OLD/.env" ] || { echo "FALTA: .env"; exit 1; }
-# Verificar el mecanismo real del virtualenv antes de usarlo.
-```
+1. Restaurar el WSGI anterior copiado al backup durante el primer paso de G6.
+2. Restaurar en el panel: source `todo_django_mongodb`, working dir `/home/jzamora/`, venv `todo-env`, mappings antiguos.
+3. Revertir la cuarentena (`mv` de vuelta) si ya se ejecutó G6-L.
+4. Recargar y verificar.
 
-Los bloques 6.4.2 y 6.4.3 reutilizan `OLD`, `ENC` y `BK`; ejecutarlos en la misma sesión o exportar esas variables.
-
-#### 6.4.2 Copia y verificación
-
-```bash
-set -euo pipefail
-
-STAMP=$(date +%Y%m%d-%H%M%S)
-BK="$HOME/backups/$STAMP"
-mkdir -p "$BK"
-
-# Base SQLite: copia consistente y verificación.
-sqlite3 "$OLD/db.sqlite3" ".backup '$BK/db.sqlite3'"
-sqlite3 "$BK/db.sqlite3" 'PRAGMA integrity_check;' | tee "$BK/db-integrity.txt"
-grep -qx 'ok' "$BK/db-integrity.txt" || { echo "ERROR: integrity_check no devolvió ok"; exit 1; }
-
-# Multimedia: puede no existir.
-if [ -d "$OLD/media" ]; then
-  tar -czf "$BK/media.tar.gz" -C "$OLD" media
-  tar -tzf "$BK/media.tar.gz" >/dev/null
-  echo "media=presente" > "$BK/media-status.txt"
-else
-  echo "media=ausente" > "$BK/media-status.txt"
-fi
-
-# .env: cifrado desde el origen; no crear copia externa en claro.
-if [ "$ENC" = "gpg" ]; then
-  gpg --symmetric --cipher-algo AES256 --output "$BK/env.backup.gpg" "$OLD/.env"
-else
-  openssl enc -aes-256-cbc -pbkdf2 -salt -in "$OLD/.env" -out "$BK/env.backup.enc"
-fi
-
-cp "/var/www/<usuario>_pythonanywhere_com_wsgi.py" "$BK/wsgi.py"
-git -C "$OLD" rev-parse HEAD > "$BK/commit.txt"
-
-# pip freeze: usar el virtualenv real, por ejemplo:
-# "$HOME/.virtualenvs/todo-env/bin/pip" freeze > "$BK/pip-freeze.txt"
-
-sha256sum "$BK"/* > "$BK/SHA256SUMS"
-sha256sum -c "$BK/SHA256SUMS"
-```
-
-- La copia externa del `.env` es el archivo cifrado (`.gpg` o `.enc`); no descargar el `.env` original.
-- Descargar también `SHA256SUMS` y verificar el checksum después de la descarga.
-- El backup no es válido hasta que pase la prueba de restauración.
-
-#### 6.4.3 Prueba de restauración
-
-```bash
-set -euo pipefail
-
-TMP=$(mktemp -d)
-sqlite3 "$BK/db.sqlite3" ".backup '$TMP/db.sqlite3'"
-sqlite3 "$TMP/db.sqlite3" 'PRAGMA integrity_check;' | grep -qx 'ok'
-if [ -f "$BK/media.tar.gz" ]; then
-  tar -tzf "$BK/media.tar.gz" >/dev/null
-fi
-
-if [ "$ENC" = "gpg" ]; then
-  gpg --decrypt "$BK/env.backup.gpg" >/dev/null
-else
-  openssl enc -d -aes-256-cbc -pbkdf2 -in "$BK/env.backup.enc" -out /dev/null
-fi
-
-rm -rf "$TMP"
-```
-
-- No imprimir el contenido de `.env`.
-- Comparar conteos de tablas críticas entre producción y la restauración cuando sea posible.
-- Registrar fecha, responsable, resultado y ubicación del backup.
-
-### 6.5 Restauración y rollback de datos (requiere autorización de producción)
-
-1. Declarar mantenimiento y detener escrituras.
-2. Si la versión nueva recibió escrituras, exportar o identificar los datos nuevos antes de tocar la base (ver 6.8).
-3. Verificar checksums y `PRAGMA integrity_check` del backup.
-4. Descifrar `.env` solo a un archivo temporal con permisos `600` o al destino final; nunca imprimir valores.
-5. Restaurar SQLite a un archivo temporal, verificar integridad y conteos; luego sustituir con la aplicación detenida.
-6. Restaurar `media/` si el backup lo contiene; si no, registrar la ausencia.
-7. Restaurar WSGI y `.env`; activar el virtualenv antiguo.
-8. Migrar solo si el esquema es compatible.
-9. `collectstatic` y recargar.
-10. Verificar login, tareas, imágenes, conteos y logs.
-11. Reconciliar datos nuevos según 6.8 y registrar el resultado.
+No se reconcilian datos: la base de TaskPilot es nueva y la aplicación anterior no la lee. Los datos que TaskPilot hubiera recibido permanecen en `/home/jzamora/taskpilot-data` y no se pierden.
 
 ### 6.6 Despliegue limpio
 
-1. Preflight: código, pruebas, backup verificado, prueba de restauración, ventana y rollback con datos nuevos.
-2. Crear release nueva y virtualenv.
-3. Instalar dependencias y `pip check`.
-4. Copiar `.env` desde una fuente segura, con permisos `600`; quitar claves Mongo; ajustar producción; no versionarlo.
-5. Copiar base con `.backup` al nuevo `DATA_DIR`; no mover la original.
-6. Copiar multimedia preservando permisos; si no existe, registrar la ausencia.
-7. Verificar integridad y conteos.
-8. `manage.py check`, `migrate --plan`, `migrate`, `collectstatic`.
-9. Configurar WSGI y pestaña Web: source, working dir, venv, estáticos, HTTPS.
-10. Recargar.
-11. Ejecutar matriz de verificación.
-12. Mantener release anterior y backup.
-13. Registrar el punto de escritura de la nueva versión y el plan de reconciliación por si se requiere rollback.
-14. Limpiar solo tras periodo de estabilidad y retención.
+**Precondiciones:** F1–F5 completadas, auditoría independiente emitida, `main` publicado y tag `v1.0.0` disponible (G5-P).
+
+1. **G6-P:** clonar el repositorio en `/home/jzamora/taskpilot` y hacer checkout de `v1.0.0`.
+2. Crear `/home/jzamora/taskpilot-data` y `/home/jzamora/taskpilot-data/media`.
+3. Crear el venv `taskpilot-env` con Python 3.10; instalar `requirements.txt`; `pip check`.
+4. Generar `.env` nuevo con `umask 077`: `SECRET_KEY` aleatoria, `DEBUG=False`, `ALLOWED_HOSTS`, `DATA_DIR`, `STATIC_ROOT`; `chmod 600`.
+5. `python manage.py migrate` (base nueva; incluye `0003`).
+6. `python manage.py collectstatic --noinput`.
+7. `python manage.py check` y `check --deploy`.
+8. `sqlite3 /home/jzamora/taskpilot-data/db.sqlite3 'PRAGMA integrity_check;'` = `ok`.
+9. **G6, primer paso de la sustitución del WSGI:**
+   - Copiar el WSGI actualmente activo al directorio de backup existente (`20261107T013845Z`). No se crea otro backup ni se alteran los artefactos ya verificados.
+   - Verificar que la copia se realizó correctamente (existencia, tamaño y checksum) antes de tocar el archivo activo.
+   - Solo entonces reemplazar el WSGI activo por el de TaskPilot.
+10. En el panel: source `/home/jzamora/taskpilot`, working dir `/home/jzamora/taskpilot`, venv `taskpilot-env`, Python 3.10; eliminar los tres mappings antiguos; añadir `/static/` → `/home/jzamora/taskpilot/staticfiles`; **no** añadir `/media/`.
+11. Activar “Force HTTPS” y recargar.
+12. Ejecutar la matriz de verificación (6.7).
+13. No borrar nada todavía; la cuarentena es G6-L.
 
 ### 6.7 Verificación
 
-- Login/registro, CRUD, filtros, estadísticas, imágenes y admin.
-- Anónimo redirigido; API 401.
-- Usuario A no accede a B; imágenes privadas.
-- CSRF ausente → 403; logout GET → 405.
-- `/.env` y `/db.sqlite3` → 404.
-- `DEBUG=False`; errores sin trazas.
-- HTTPS y cookies seguras.
-- Conteos e integridad SQLite correctos.
-- Backup externo cifrado, checksum verificado y prueba de restauración documentada.
-- Rollback con datos nuevos documentado y, si es posible, ensayado.
-- Logs sin errores 500 repetidos.
-- `check --deploy` y `showmigrations` correctos.
+**Antes de G6:**
 
-### 6.8 Rollback y datos nuevos
+- `manage.py check` y `check --deploy` sin errores críticos.
+- `migrate` sin pendientes; integridad `ok`.
+- `collectstatic` completo; `pip check` limpio.
+- Backup G0-B íntegro y verificado. La copia del WSGI vigente **no** es una precondición previa: se realiza dentro de G6, antes del reemplazo.
+- `du -sh` coherente con la cuota.
 
-Conservar WSGI anterior, release anterior, venv, mappings, commit, base y multimedia. No borrar nada hasta estabilizar.
+**Durante G6, antes del reemplazo:**
 
-Antes de restaurar:
+- Copia del WSGI vigente realizada en el backup existente.
+- Existencia, tamaño y checksum de la copia verificados.
+- Solo entonces se reemplaza el archivo activo.
 
-- Si la versión nueva no recibió escrituras: rollback directo a la release anterior y, si el esquema no es compatible, restaurar la base del backup.
-- Si recibió escrituras: congelar escrituras, exportar los registros nuevos o un diff y decidir explícitamente:
-  - **forward-fix** si el esquema es compatible;
-  - restaurar la base anterior y reimportar o reconciliar los datos nuevos tras validar compatibilidad;
-  - mantener la base nueva y revertir solo el código si el esquema es compatible.
-- No restaurar la base anterior sobre datos nuevos sin aprobación y sin registrar la posible pérdida.
-- Documentar decisión, responsable, conteos, evidencia y datos reconciliados.
+**Después de G6:**
 
-Después del rollback: restaurar mappings, recargar y verificar login, tareas, imágenes y logs.
+```bash
+curl -sS -o /dev/null -w "%{http_code}\n" https://jzamora.pythonanywhere.com/
+curl -sS -o /dev/null -w "%{http_code}\n" https://jzamora.pythonanywhere.com/.env
+curl -sS -o /dev/null -w "%{http_code}\n" https://jzamora.pythonanywhere.com/db.sqlite3
+curl -sS -o /dev/null -w "%{http_code}\n" https://jzamora.pythonanywhere.com/media/
+```
 
-### 6.9 Limpieza
+- `/` → 200 o 302 a login.
+- `.env`, `db.sqlite3` y `/media/` → 404.
+- Estático de TaskPilot → 200.
+- Registro, login, CRUD y logout POST funcionan.
+- Subida de imagen y visualización autenticada funcionan.
+- Otro usuario recibe 404/403 en tarea e imagen ajenas.
+- Base nueva: 0 usuarios y 0 tareas antes del registro; integridad `ok`.
+- `showmigrations` sin pendientes.
+- Logs sin `ImportError` ni 500 repetidos.
 
-Tras 7–30 días: eliminar releases y venv antiguos, conservar backups según retención y no borrar web app, dominio, base principal, multimedia ni `.env` de producción. No eliminar backups antes de la retención aprobada ni sin una prueba de restauración vigente.
+### 6.8 Cuarentena (G6-L, 7 días)
+
+Solo tras verificar G6. Ejecutar desde una consola **sin** `todo-env` activo.
+
+```bash
+set -euo pipefail
+STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+Q="$HOME/.quarantine-$STAMP"
+install -d -m 700 "$Q"
+
+mv "$HOME/todo_django_mongodb"         "$Q/"
+mv "$HOME/sample-web-personal-django2" "$Q/"
+mv "$HOME/.virtualenvs/todo-env"       "$Q/"
+mv "$HOME/.virtualenvs/webpersonal"    "$Q/"
+
+# Solo tras verificar su contenido:
+mv /var/www/__pycache__                "$Q/www-pycache"
+
+echo "QUARANTINE=$Q"
+du -sh "$HOME"
+```
+
+- `/var/www/jzamora_pythonanywhere_com_wsgi.py` **no se borra**: ya fue reemplazado en G6.
+- `README.txt` y los logs se conservan.
+- La cuarentena es reversible con `mv`.
+- Ventana: 7 días desde G6-L.
+
+### 6.9 Purga (G7)
+
+Tras 7 días y con la aplicación estable:
+
+```bash
+rm -rf "$HOME/.quarantine-<STAMP>"
+du -sh "$HOME"
+```
+
+Inventario eliminado (≈229.7 MB):
+
+| Recurso | Tamaño |
+|---|---|
+| `todo_django_mongodb` | 8.7 MB |
+| `sample-web-personal-django2` | 30 MB |
+| `.virtualenvs/todo-env` | 99 MB |
+| `.virtualenvs/webpersonal` | 92 MB |
+| `/var/www/__pycache__` | ~1 KB |
+
+- El backup `20261107T013845Z` se conserva hasta que G7 autorice su borrado.
+- No se borran la Web App, el dominio, `taskpilot`, `taskpilot-data` ni los logs.
+- HOME quedará en ≈79 MB usados y ≈433 MB libres, suficiente para el venv nuevo.
+
+### 6.10 Dependencias exactas
+
+```txt
+Django==5.2.19
+Pillow==12.3.0
+python-dotenv==1.2.4
+asgiref==3.12.1
+sqlparse==0.6.1
+```
+
+| Paquete | Requisito | Motivo |
+|---|---|---|
+| Django 5.2.19 | `>=3.10` | Última 5.2 LTS; SQLite ≥ 3.31.0 |
+| Pillow 12.3.0 | `>=3.10` | Wheels `cp310`; 13.0.0 exige ≥3.11 |
+| python-dotenv 1.2.4 | `>=3.10` | Compatible |
+| asgiref 3.12.1 | `>=3.10` | 3.13.0 exige ≥3.11; no subir |
+| sqlparse 0.6.1 | `>=3.10` | Compatible |
+
+Sin `pymongo`, `mongoengine` ni `dnspython`.
 
 ---
 
@@ -514,7 +594,7 @@ Tras 7–30 días: eliminar releases y venv antiguos, conservar backups según r
 | `README.md` | Producto, características, stack, instalación, comandos, enlaces |
 | `ARCHITECTURE.md` | Diagramas, capas, modelo, auth, API, medios, SQLite/PA, ADRs |
 | `SECURITY.md` | Amenazas, authz, CSRF, IDOR, uploads, secretos, cabeceras, incidentes |
-| `DEPLOYMENT.md` | Inventario, backup, deploy, WSGI, env, migraciones, verificación y rollback |
+| `DEPLOYMENT.md` | Inventario, backup, deploy por tag, WSGI, env, migraciones, verificación y rollback |
 | `ENVIRONMENT.md` | Variables, dev/prod, `.env`, `DATA_DIR`, rotación |
 | `CHANGELOG.md` | Keep a Changelog, SemVer, `1.0.0` |
 | `CONTRIBUTING.md` | Ramas, commits, PR, pruebas, migraciones, secretos |
@@ -540,7 +620,7 @@ taskpilot/
 ├── CONTRIBUTING.md
 ├── RUNBOOK.md
 ├── config/
-│   ├── settings/{__init__,base,dev,prod}.py
+│   ├── settings.py            # o settings/{base,dev,prod}.py
 │   ├── urls.py
 │   ├── wsgi.py
 │   └── asgi.py
@@ -550,59 +630,132 @@ taskpilot/
 │   ├── validators.py
 │   ├── services.py
 │   ├── selectors.py
-│   ├── views/{__init__,web,auth,api}.py
+│   ├── views/
 │   ├── urls.py
 │   ├── admin.py
 │   ├── management/commands/
 │   ├── migrations/
+│   │   ├── 0001_initial.py
+│   │   ├── 0002_todotask_user.py
+│   │   └── 0003_alter_todotask_user.py   # user NOT NULL
 │   └── tests/
 ├── templates/{todos,errors}/
-├── static/
+├── static/                    # opcional; si existe, con .gitkeep
 ├── docs/adr/
 └── .github/workflows/ci.yml
 ```
 
-Eliminar `todos/db.py`; sustituir `PYTHONANYWHERE_DEPLOY.md` por `DEPLOYMENT.md`.
-
-Dependencias de producción: Django, Pillow y python-dotenv, con versiones fijadas. Mongo fuera. Desarrollo opcional: `coverage`, `ruff`. Sin DRF, Celery, Redis, Sentry ni servicios externos sin aprobación.
+- Eliminar `todos/db.py`.
+- Sustituir `PYTHONANYWHERE_DEPLOY.md` por `DEPLOYMENT.md`.
+- Si se dividen los settings, actualizar `config/wsgi.py` y el WSGI de PythonAnywhere.
+- Dependencias de producción: Django, Pillow, python-dotenv, asgiref y sqlparse, con versiones fijadas.
+- Desarrollo opcional: `coverage`, `ruff`. Sin DRF, Celery, Redis, Sentry ni servicios externos sin aprobación.
 
 ### 7.3 Credenciales
 
-Documentar ubicación y rotación, nunca valores: GitHub (cuenta, 2FA, PAT/SSH), PythonAnywhere (cuenta, 2FA, Web, WSGI, venv, API token), `.env` (permisos 600, gestor de secretos), SQLite (archivo, backups), dominio/WSGI y backups cifrados. No incluir secretos en Markdown, Git, logs ni chat.
+Documentar ubicación y rotación, nunca valores: GitHub (cuenta, 2FA, PAT/SSH), PythonAnywhere (cuenta, 2FA, Web, WSGI, venv, API token), `.env` (permisos 600), SQLite (archivo, backups), dominio/WSGI y backups. No incluir secretos en Markdown, Git, logs ni chat.
 
 ---
 
 ## 8. Fases de ejecución
 
-El orden prioriza la seguridad: F1 corrige autenticación, autorización y exposición de datos antes de F2 (identidad y limpieza de MongoDB). La numeración de gates sigue el orden de ejecución: G1 corresponde a F1 (seguridad) y G2 a F2 (identidad).
+El orden prioriza la seguridad: F1 corrige autenticación, autorización y exposición de datos antes de F2 (identidad y limpieza de MongoDB). La numeración de gates sigue el orden de ejecución.
 
 ### 8.1 F0 — Operaciones separadas y autorizaciones
 
-| Operación | Tipo | Escribe | Autorización | No autoriza |
+| Operación | Tipo | Estado | Autorización | No autoriza |
 |---|---|---|---|---|
-| F0.1 Inventario | Solo lectura | No | G0 | Backup, tag, bundle, código, Git, GitHub o producción |
-| F0.2 Backup | Escritura de respaldo | Archivos de backup y almacenamiento | G0-B; indicar alcance local, producción o ambos | Tag, bundle, cambios de app/base o deploy |
-| F0.3 Tag local | Escritura local de Git | Ref local | G0-T | Push, bundle, renombrado o deploy |
-| F0.4 Bundle local | Escritura local de Git | Archivo bundle | G0-U | Push, tag, renombrado o deploy |
+| F0.1 Inventario | Solo lectura | **Completado** | G0 | Backup, tag, bundle, código, Git, GitHub o producción |
+| F0.2 Backup | Escritura de respaldo | **Completado** (`20261107T013845Z`) | G0-B | Tag, bundle, cambios de app/base o deploy |
+| F0.3 Tag local | Escritura local de Git | No ejecutado | G0-T | Push, bundle, renombrado o deploy |
+| F0.4 Bundle local | Escritura local de Git | No ejecutado | G0-U | Push, tag, renombrado o deploy |
 
-G0 no autoriza automáticamente backup, tag ni bundle. Cada operación de escritura requiere una autorización separada y registrada. El backup de producción requiere además ventana y confirmación de producción.
+G0 no autoriza automáticamente backup, tag ni bundle. Cada operación de escritura requiere una autorización separada y registrada.
 
 ### 8.2 Fases
 
 | Fase | Gate | Objetivo y cambios | Depende | Pruebas / aceptación | Impacto |
 |---|---|---|---|---|---|
-| **F0** | G0; G0-B/T/U según se autoricen | Gobernanza: inventario de solo lectura, backup autorizado, baseline y decisiones. Tag/bundle solo con G0-T/G0-U. | — | Inventario completo; si G0-B se autoriza, backup con checksums, integridad y restauración probada; autorizaciones registradas. | Escritura de respaldo y consumo de almacenamiento; tag/bundle son escrituras locales de Git; no modifica la aplicación ni la base. |
-| **F1** | G1 | Seguridad I: login obligatorio, propiedad estricta, 404, CSRF, logout POST, API 401, multimedia privada, settings seguros, rotación de clave. | F0.1 y F0.2 | Matriz anónimo/A/B, IDOR, CSRF, imágenes, `check --deploy`. | Alto: mantenimiento, datos y mappings. |
-| **F2** | G2 | Identidad TaskPilot: renombrar repo/carpeta, quitar MongoDB y dependencias, actualizar docs/marca, fijar versiones. | F1 aceptada; F0.3/F0.4 si se autorizan | Cero refs Mongo, `check`, tests, `makemigrations --check`. | Rutas PA/WSGI; coordinar F6. |
-| **F3** | G3 | Seguridad II: formularios/JSON, uploads, transacciones, huérfanos, errores, logging, SQLite. | F1 | Entradas inválidas, imágenes, transacciones, errores, integridad. | Medio: migraciones y backup. |
-| **F4** | G4 | Seguridad III/Calidad: módulos, API versionada, paginación, tests, cobertura, lint, correcciones JS/fechas. | F1 y F3 | Suite verde, cobertura ≥80 % crítico, API documentada. | Bajo. |
+| **F0** | G0; G0-B completado | Gobernanza: inventario, baseline, backup y decisiones. | — | Inventario completo; backup con checksums, integridad y restauración probada. | Escritura de respaldo; no modifica la app ni la base. |
+| **F1** | G1 | Seguridad I: login obligatorio, propiedad estricta, 404, CSRF, logout POST, API 401 JSON, multimedia privada, settings seguros, `0003`, rotación de clave. | F0 | Suite F1 (§8.3): 401 JSON en API, 302 en web, IDOR 404, CSRF 403, imágenes privadas, `0003` en base temporal limpia, `check --deploy`. | Alto: código, migraciones y pruebas. |
+| **F2** | G2 | Identidad TaskPilot: renombrar carpeta local, quitar MongoDB y dependencias, actualizar docs/marca, fijar versiones. El rename de GitHub se difiere a G2-GH. | F1 aceptada | Cero refs Mongo, `check`, tests, `makemigrations --check`. | Rutas locales y documentación; sin producción. |
+| **F3** | G3 | Seguridad II: formularios/JSON, uploads, transacciones, errores, logging, SQLite. | F1 | Entradas inválidas, imágenes, transacciones, errores, integridad. | Medio: migraciones y pruebas. |
+| **F4** | G4 | Calidad: módulos, API versionada, paginación, tests, cobertura, lint. | F1 y F3 | Suite verde, cobertura ≥80 % crítico, API documentada. | Bajo. |
 | **F5** | G5 | Documentación completa, ADRs, entorno, runbook y changelog. | F1–F4 | Comandos reproducibles, sin secretos, enlaces válidos. | Ninguno. |
-| **F6** | G6 | Despliegue PA: backup, release paralela, venv, env, datos, migraciones, estáticos, WSGI, verificación. | F0–F5 | Matriz funcional/seguridad/datos, rollback con datos nuevos. | Alto: producción. |
-| **F7** | G7 | Cierre: rotación final, 2FA, backups, monitoreo, retención, tag `v1.0.0`, limpieza. | F6 + estabilidad | Operación estable, backup verificado. | Bajo. |
+| **F5-P** | G5-P | Publicación: push de `main` y tag `v1.0.0`. | F5 + auditoría independiente (§8.4) | Fast-forward, tag anotado, escaneo de secretos, informe de auditoría emitido y hallazgos críticos/altos resueltos o aceptados. | GitHub. |
+| **F6-P** | G6-P | Aprovisionamiento: clone por tag, `taskpilot-data`, venv, `.env`, base nueva, `migrate`, `collectstatic`, checks. | F5-P | `check`, `check --deploy`, integridad `ok`, `pip check`. | Escritura en PA; no toca Web App ni borra nada. |
+| **F6** | G6 | Conmutación: WSGI, source, venv, mappings, HTTPS, reload. | F6-P | Matriz funcional/seguridad; rollback listo. | Alto: producción. |
+| **F6-L** | G6-L | Cuarentena de ambos proyectos, ambos venvs y `__pycache__`. | F6 estable | App responde; rutas antiguas en cuarentena; reversible. | Reversible (`mv`). |
+| **F7** | G7 | Cierre: purga de cuarentena, decisión sobre el backup y monitoreo. | F6-L + 7 días | Estabilidad, `du`, backup verificado. | Destructivo autorizado. |
 
-**Ruta crítica:** F0 → F1 → F2 → F3 → F4 → F5 → F6 → F7.
+**Ruta crítica:** F0 → F1 → F2 → F3 → F4 → F5 → F5-P → F6-P → F6 → F6-L → F7.
 **Ruta crítica de seguridad:** F0 → F1 → F3 → F6.
-**Nota de prioridad:** F2 (identidad y MongoDB) no bloquea F1 ni F3; la corrección de acceso anónimo, autorización y multimedia pública se ejecuta primero.
+**Nota:** F2 (identidad y MongoDB) no bloquea F1 ni F3. El rename de GitHub ocurre después de F6.
+
+### 8.3 Pruebas mínimas de F1
+
+Se ejecutan en local, sin producción y sin usar la base local existente para `0003`.
+
+| Caso | Resultado esperado |
+|---|---|
+| Web anónima `/` | `302` al login |
+| API anónima `GET /api/todos/` | **`401` JSON**, `Content-Type: application/json`, sin `Location` |
+| API anónima `POST` con token CSRF válido | `401` JSON; sin efectos |
+| API autenticada como A | Solo tareas de A |
+| API autenticada como B sobre tarea de A | `404` (o código de la matriz) |
+| POST web sin CSRF | `403` |
+| POST API sin CSRF | `403` (el middleware CSRF actúa antes de la autenticación) |
+| Logout por `GET` | `405` |
+| Logout por `POST` con CSRF | `302`/`200` |
+| Imagen de A solicitada por A | `200` |
+| Imagen de A solicitada por B | `404` |
+| Imagen de A solicitada por anónimo | `302` al login (vista web) |
+| `csrf_exempt` en API | Ausente |
+| Migración `0003` en base temporal | `0001` → `0002` → `0003` sin error; `todos_todotask.user_id` con `NOT NULL` |
+| Base local `db.sqlite3` | Intacta; no se usa para validar `0003` |
+
+Notas:
+
+- Para comprobar `401` en un `POST` anónimo hay que enviar un token CSRF válido; sin token, Django devuelve `403` antes de llegar a la autenticación.
+- La prueba de `0003` crea una base SQLite temporal y limpia, aplica las tres migraciones y verifica el esquema. **No** se asignan propietarios artificiales, no se borra la base local y no se sustituye sin instrucción independiente.
+- La suite completa se ejecuta una vez por fase. La auditoría usa pruebas puntuales, no una segunda suite completa sin justificación.
+
+### 8.4 Auditoría independiente de Antigravity (previa a G5-P)
+
+La auditoría es una verificación de solo lectura. **No crea un gate nuevo** y no autoriza cambios ni despliegues.
+
+**OpenCode:**
+
+- Implementa el código.
+- Ejecuta las pruebas automatizadas de cada fase.
+- Corrige los errores encontrados.
+- Entrega un resumen breve con archivos modificados, pruebas ejecutadas, resultados y limitaciones.
+
+**Antigravity (Gemini):**
+
+- Actúa como auditor independiente de solo lectura.
+- Revisa después de F1–F5 y antes de G5-P.
+- No vuelve a analizar todo el repositorio.
+- No modifica archivos, código, dependencias, configuración ni datos.
+- No instala paquetes ni ejecuta comandos en PythonAnywhere.
+- Puede revisar los resultados de OpenCode y ejecutar pruebas puntuales en un entorno local controlado, con bases temporales fuera del proyecto, siempre que no altere datos de trabajo ni archivos del proyecto.
+
+**Material mínimo:**
+
+1. Resumen de cambios y resultados de pruebas de OpenCode.
+2. Secciones pertinentes de `MASTER_PLAN.md`.
+3. Configuración relevante de Django.
+4. Vistas web y API, servicios, modelos y URLs.
+5. Migraciones `0001`, `0002` y `0003`.
+6. Pruebas de autenticación, propiedad, CSRF e imágenes.
+7. Plantillas o archivos de administración que gestionen imágenes, cuando sean pertinentes.
+8. Dependencias de producción.
+
+**Exclusiones:** no facilitar `.env`, claves API, contraseñas, secretos, bases de datos reales, multimedia, backups ni tokens.
+
+**Alcance:** autenticación y respuestas HTTP; aislamiento de tareas entre usuarios; protección de API y CSRF; acceso a imágenes privadas; migraciones y consistencia del modelo; configuración de seguridad y exposición de secretos.
+
+**Resultado exigido:** informe breve con hallazgos clasificados por severidad, archivo y ubicación, evidencia y recomendación. Antigravity no corrige los hallazgos; las correcciones corresponden a OpenCode y requieren la autorización de implementación aplicable. La auditoría no duplica la suite completa: aporta verificación independiente.
 
 ---
 
@@ -610,88 +763,185 @@ G0 no autoriza automáticamente backup, tag ni bundle. Cada operación de escrit
 
 | Categoría | Ejemplos | Estado actual |
 |---|---|---|
-| **Solo lectura** | Inventario F0.1, `git status`, `git log`, `git remote -v`, `git ls-remote`, `ls`, `du`, `pip freeze`, `sqlite3 ... PRAGMA integrity_check`, `SELECT count(*)`, `manage.py check`, `showmigrations`, leer archivos y `curl` GET | Permitido solo con alcance autorizado; no incluye backup |
-| **Cambios locales** | Crear/editar archivos, backup local, instalar dependencias, ejecutar pruebas, migraciones locales, `collectstatic`, renombrar carpeta, commits, tags, ramas, bundles | Requiere gate específico: G0-B backup, G0-T tag, G0-U bundle, G1 seguridad, G2 identidad, etc. |
-| **Cambios en GitHub** | Renombrar repositorio, push, tags, ramas, configuración, tokens, branch protection | Requiere G2 o gate de GitHub explícito; G0-T/G0-U no autorizan push |
-| **Cambios en producción** | Backup de producción, crear release, venv, `pip install`, `.env`, migraciones, copia de base/media, WSGI, mappings, reload, limpieza | Requiere G0-B si es backup y G6/G7 para deploy/limpieza; ventana obligatoria |
+| **Solo lectura** | Inventario, `git status`, `git log`, `git remote -v`, `git ls-remote`, `ls`, `du`, `pip freeze`, `PRAGMA integrity_check`, `SELECT count(*)`, `check`, `showmigrations`, `curl` GET | Permitido con alcance autorizado; no incluye backup |
+| **Cambios locales** | Editar archivos, backup local, instalar dependencias, pruebas, migraciones locales, `collectstatic`, renombrar carpeta, commits, tags, ramas, bundles | Requiere gate específico: G0-B, G0-T, G0-U, G1, G2, G5-P, etc. |
+| **Cambios en GitHub** | Push, tags, renombrar repositorio, configuración, tokens, branch protection | G5-P para push/tag; G2-GH para renombrar; G0-T/G0-U no autorizan push |
+| **Cambios en producción (no destructivos)** | Crear `taskpilot`, venv, `.env`, base nueva, `collectstatic`, reemplazar WSGI, mappings, reload | G6-P y G6, con ventana obligatoria |
+| **Eliminación / cuarentena** | `mv` de proyectos y venvs a cuarentena; `rm -rf` de cuarentena; borrar `/var/www/__pycache__` | G6-L (cuarentena) y G7 (purga); nunca dentro de G6-P o G6 |
+| **Datos** | Migrar datos, asignar huérfanas, borrar base o multimedia | No aplica: base nueva y vacía; cualquier excepción requiere gate propio |
 
-La creación y corrección de `MASTER_PLAN.md` no autoriza ninguna de estas operaciones. No se ejecutaron backups, tags, bundles, migraciones, Git, GitHub ni PythonAnywhere.
+La creación y corrección de `MASTER_PLAN.md` no autoriza ninguna de estas operaciones.
 
 ---
 
-## Approval Gates
+## 10. Approval Gates
 
-La numeración de gates sigue el orden cronológico de ejecución: G1 corresponde a F1 (seguridad) y G2 a F2 (identidad TaskPilot y limpieza MongoDB).
+La numeración sigue el orden de ejecución. **Cada gate es independiente** y requiere confirmación explícita y registrada.
 
 | Gate | Autorización explícita necesaria | Autoriza | No autoriza | Evidencia previa |
 |---|---|---|---|---|
-| **G0** | Aprobar este plan maestro y el orden de fases | F0.1: inventario de solo lectura y revisión | Backup, tag, bundle, código, Git, GitHub o producción | Plan revisado |
-| **G0-B** | Autorizar backup y especificar alcance (local, producción o ambos) | F0.2: crear backups, checksums, cifrado de `.env` y prueba de restauración | Tag, bundle, cambios de app/base o deploy | G0, alcance definido y ventana si es producción |
-| **G0-T** | Autorizar tag local | F0.3: crear tag local | Push, bundle, renombrado o deploy | G0 y árbol limpio |
-| **G0-U** | Autorizar bundle local | F0.4: crear bundle local | Push, tag, renombrado o deploy | G0 y árbol limpio |
-| **G1** | Aprobar F1: seguridad de autenticación y autorización | Código auth/authz, CSRF, multimedia privada, migraciones locales y pruebas | Producción | F0.1/F0.2 y diseño de autorización, datos y huérfanas aprobado |
-| **G2** | Aprobar F2: identidad TaskPilot y limpieza MongoDB | Renombrar local/GitHub, quitar Mongo, actualizar marca/docs, commits y push | Producción | F1 aceptada, backup verificado y repo limpio |
+| **G0** | Aprobar este plan maestro y el orden de fases | F0.1: inventario de solo lectura | Backup, tag, bundle, código, Git, GitHub o producción | Plan revisado |
+| **G0-B** | Autorizar backup y alcance | F0.2: backup, checksums y restauración | Tag, bundle, cambios de app/base o deploy | G0 y ventana si es producción. **Ejecutado** |
+| **G0-T** | Autorizar tag local | F0.3 | Push, bundle, renombrado o deploy | G0 y árbol limpio |
+| **G0-U** | Autorizar bundle local | F0.4 | Push, tag, renombrado o deploy | G0 y árbol limpio |
+| **G1** | Aprobar F1: seguridad de autenticación y autorización | Código auth/authz, CSRF, multimedia privada, `0003`, pruebas | Producción | F0 y diseño de autorización aprobado |
+| **G2** | Aprobar F2: identidad local y limpieza MongoDB | Renombrar carpeta local, quitar Mongo, marca/docs, commits | Producción ni rename de GitHub | F1 aceptada, backup verificado y repo limpio |
 | **G3** | Aprobar F3: robustez | Validación, uploads, transacciones, errores, logging y migraciones locales | Producción | F1 aceptada |
 | **G4** | Aprobar F4: calidad | Refactor, API, pruebas, lint y cobertura | Producción | F1 y F3 aceptadas |
-| **G5** | Aprobar F5: documentación | Documentación y ADRs | Producción | F1–F4 |
-| **G6** | Aprobar ventana de producción | Backup de producción, deploy, migraciones, mappings, reload y rollback ensayado | Limpieza definitiva | F5, backup verificado y rollback con datos nuevos documentado |
-| **G7** | Aprobar cierre y limpieza | Rotación final, tag `v1.0.0`, push de tag y eliminación de releases antiguas | Borrar datos, dominio o backups dentro de retención | Estabilidad y backups verificados |
+| **G5** | Aprobar F5: documentación | Documentación y ADRs | Producción ni GitHub | F1–F4 |
+| **G5-P** | Aprobar publicación | Push de `main` por fast-forward y tag `v1.0.0` | Deploy ni renombrado de GitHub | F1–F5, auditoría independiente emitida, árbol limpio y escaneo de secretos |
+| **G6-P** | Aprobar aprovisionamiento | Crear `taskpilot`, `taskpilot-data`, venv, `.env`, base nueva, `collectstatic`, checks | Cambiar Web App/WSGI, borrar o cuarentenar | G5-P completado; tag `v1.0.0` disponible |
+| **G6** | Aprobar ventana de producción | Reemplazar WSGI, source, venv, mappings, HTTPS y reload; rollback listo | Cuarentena, purga, renombrar GitHub | F6-P verificado |
+| **G6-L** | Aprobar cuarentena | `mv` de ambos proyectos, ambos venvs y `__pycache__` verificado | Borrar la cuarentena | G6 estable y verificado |
+| **G7** | Aprobar cierre y purga | `rm -rf` de cuarentena, decisión sobre backup y monitoreo | Borrar dominio, Web App o datos de TaskPilot | 7 días de estabilidad y backup verificado |
+| **G2-GH** | Aprobar renombrado de GitHub posterior al despliegue | Renombrar repo a `taskpilot-django` y actualizar `origin` | Cambios de código o producción | G6 estable |
 
-G0 **no** autoriza backup, tag ni bundle. G0-B, G0-T y G0-U son autorizaciones independientes y deben registrarse por separado. La aprobación del diseño **no** equivale a autorización de implementación. Cada gate requiere confirmación explícita y separada.
+**G6-P, G6, G6-L y G7 no están autorizados.** G0-B se ejecutó; G0-T y G0-U no. La aprobación del diseño no equivale a autorización de implementación.
 
 ---
 
-## 10. Riesgos y criterios globales
+## 11. Riesgos y criterios globales
 
-### 10.1 Riesgos
+### 11.1 Riesgos
 
 | Riesgo | Mitigación |
 |---|---|
-| Pérdida de datos al cambiar ruta de base | `DATA_DIR` fuera de releases, backup y verificación |
-| Acceso cruzado entre usuarios | Tests de autorización, filtros por propietario y 404 |
-| Imágenes públicas | Sin mapping `/media/`; `FileResponse` autenticado |
-| Bloqueo SQLite | Timeout, un solo worker cuando la cuenta lo permita, transacciones cortas, WAL evaluado |
-| Migración irreversible | Backup, plan y restauración documentada |
-| Renombrado rompe WSGI/rutas | Checklist de PA y release paralela |
-| Secreto expuesto | Rotación, `.env` 600, escaneo y 2FA |
-| API rota | Versionado y pruebas de contrato |
-| Disco lleno o cuota distinta a la esperada | Verificar cuota real; retención y monitoreo |
-| Supuestos de PythonAnywhere no verificados | Verificar plan, cuotas, herramientas, almacenamiento y dominio en la cuenta real antes de F0.2/F6 |
-| Backup no restaurable | Checksums, `integrity_check`, prueba de restauración y registro |
-| Herramientas de backup ausentes | Preflight; alternativas GPG/OpenSSL y rutas reales de venv |
-| Rollback pierde escrituras nuevas | Congelar escrituras, exportar/diff, forward-fix o reconciliación aprobada |
-| Tag/bundle sin autorización | G0-T/G0-U separados; G0 no los autoriza |
-| Migración de huérfanas sin propietario | Propietario aprobado y trazable antes de migrar |
-| Pérdida de historial Git | Renombrar, no recrear; no force push |
+| Python 3.10 EOL (oct. 2026) | Riesgo aceptado en D1; Django 5.2 LTS lo soporta hasta abril 2028; revisar cuando PA ofrezca ≥3.11 |
+| Django 6.x incompatible con Python 3.10 | Fijar `Django==5.2.19`; no actualizar a 6.x |
+| Borrar el blog antes de cambiar el WSGI | Orden estricto G6 → G6-L |
+| Sin URL de staging | Ventana de mantenimiento y rollback de configuración |
+| Pérdida irreversible | Cuarentena con `mv`; purga solo en G7 |
+| SQLite sobre almacenamiento de red | `timeout=20`, sin WAL, operaciones cortas |
+| HTTPS mal configurado | Activar Force HTTPS y `SECURE_PROXY_SSL_HEADER` juntos |
+| Cuota mal calculada | 309 MB usados; tras la limpieza ≈79 MB usados y ≈433 MB libres |
+| Multimedia pública | Sin mapping `/media/`; `FileResponse` autenticado |
+| Imágenes rotas tras quitar `/media/` | Implementar la vista privada en F1 antes de G6 |
+| `STATICFILES_DIRS` inexistente | Eliminar la entrada o añadir `.gitkeep` |
+| Secretos expuestos | Rotación, `.env` 600, escaneo y 2FA |
+| Repo renombrado con clone antiguo | Actualizar `origin` en G2-GH; GitHub redirige |
+| Backup no restaurable | Checksums, `integrity_check` y prueba ya realizadas |
+| Tag/clon incorrecto | Desplegar por `v1.0.0`, nunca por `01eb960` |
+| Rollback pierde escrituras nuevas | Los datos de TaskPilot permanecen en `taskpilot-data`; no se reconcilian con la app antigua |
 
-### 10.2 Criterios globales de aceptación
+### 11.2 Criterios globales de aceptación
 
 - Sin acceso anónimo salvo login/registro.
+- API anónima responde `401 JSON`; las vistas web pueden redirigir al login.
 - Sin acceso cruzado entre usuarios.
-- CSRF en todas las escrituras; logout POST.
+- CSRF en todas las escrituras, incluida la API; logout POST.
 - Multimedia privada y uploads validados.
+- `0003` validada en una base SQLite temporal y limpia; base local intacta.
+- Copia del WSGI vigente verificada antes del reemplazo.
+- Auditoría independiente emitida antes de G5-P; hallazgos críticos/altos resueltos o aceptados.
 - Sin secretos en repo, historial, docs ni logs.
 - `DEBUG=False`, hosts exactos y HTTPS en producción.
 - Cero referencias y dependencias MongoDB.
-- Cuotas, herramientas y capacidades de PythonAnywhere verificadas en la cuenta real.
-- Backup con checksums, integridad y restauración probada; `.env` externo cifrado.
-- Conteos de datos coincidentes e integridad SQLite correcta.
-- Pruebas de autorización, CSRF, uploads y API en verde.
-- Cobertura crítica ≥ 80 %.
+- Django 5.2.19 y Python 3.10 documentados; riesgo EOL registrado.
+- Base nueva: 0 usuarios y 0 tareas; `PRAGMA integrity_check=ok`.
+- `/.env`, `/db.sqlite3` y `/media/` responden 404.
+- Backup conservado y verificado; sin copias externas nuevas.
+- Cuarentena de 7 días antes de la purga.
 - `check --deploy` sin advertencias críticas.
 - Documentación completa y sin credenciales.
-- Rollback documentado, con política para datos nuevos y, si es posible, ensayado.
-- Tareas huérfanas asignadas solo con propietario aprobado y trazable.
-- F0: G0 no autoriza backup, tag ni bundle; cada escritura tiene gate propio.
-- F1 (seguridad) ejecutada antes de F2 (identidad).
-- Sin servicios de pago; SQLite y plan gratuito aceptados solo después de verificar cuotas y riesgos.
+- Rollback documentado y, si la ventana lo permite, ensayado.
+- G6-P, G6, G6-L y G7 autorizados por separado.
 
-### 10.3 No-go
+### 11.3 No-go
 
-No se cierra la modernización si hay acceso cruzado, secreto expuesto, backup sin prueba de restauración, rollback sin tratamiento de datos nuevos, migración de huérfanas sin propietario aprobado, `DEBUG=True`, multimedia privada pública, diferencias de datos inexplicadas, errores 500 repetidos, uso de cuotas o capacidades de PythonAnywhere no verificadas como garantía, o tag/bundle creado sin G0-T/G0-U.
+No se cierra la modernización si hay acceso cruzado, secreto expuesto, backup sin prueba de restauración, `DEBUG=True`, multimedia privada pública, base con datos inesperados, errores 500 repetidos, mappings apuntando a rutas eliminadas, Django distinto de 5.2.19, API que redirige en lugar de devolver `401 JSON`, `0003` validada sobre la base local o con propietarios artificiales, WSGI reemplazado sin copia verificada, G5-P ejecutado sin auditoría independiente, o cualquier fase ejecutada sin su gate.
 
 ---
 
-## 11. Próximo paso
+## 12. Próximo paso
 
-Revisar y aprobar este documento y las decisiones pendientes de la sección 3.3. G0 solo habilita F0.1 (inventario de solo lectura). Backup, tag y bundle requieren G0-B, G0-T y G0-U, respectivamente. La primera fase de implementación es F1 (seguridad, G1), antes de F2 (identidad, G2). Ninguna aprobación de este plan autoriza por sí sola cambios en código, Git, GitHub o PythonAnywhere.
+**Estado actual:**
+
+- **F1–F5 no ejecutadas.**
+- **Auditoría independiente de Antigravity pendiente**, después de F1–F5 y antes de G5-P.
+- **G0-B ejecutado.**
+- **G0-T y G0-U no autorizados.**
+- **G0 correspondiente a v2 pendiente de aprobación.**
+- **G1 y todos los demás gates conservan su estado independiente.**
+
+**Secuencia:**
+
+1. Revisar y aprobar explícitamente **G0 para v2**.
+2. Solo después, solicitar **G1** para ejecutar F1 (seguridad).
+3. Tras F1–F5, ejecutar la auditoría independiente (§8.4) y resolver los hallazgos bajo la autorización de la fase correspondiente.
+4. Solicitar **G5-P** para publicar `main` y el tag `v1.0.0`.
+5. Solo entonces solicitar **G6-P**, seguido de **G6**, **G6-L** y **G7**, cada uno por separado.
+6. El renombrado de GitHub (**G2-GH**) se solicita después de G6.
+
+Ninguna autorización de esta actualización permite implementar, publicar, desplegar ni modificar PythonAnywhere o GitHub. **G6-P, G6, G6-L y G7 siguen sin autorización.**
+
+---
+
+## Apéndice A — Registro de decisiones
+
+| ID | Fecha | Decisión |
+|---|---|---|
+| D1 | 2026-11-06 | Django 5.2.19 + Python 3.10; riesgo EOL aceptado temporalmente |
+| D2 | 2026-11-06 | `/home/jzamora/taskpilot` + `/home/jzamora/taskpilot-data`; `staticfiles` dentro del proyecto |
+| D3 | 2026-11-06 | Conservar `0001`/`0002`; añadir `0003` para `user` obligatorio |
+| D4 | 2026-11-06 | Cuarentena de 7 días |
+| D5 | 2026-11-06 | Conservar backup hasta G7; no crear otro |
+| D6 | 2026-11-06 | Eliminar `/var/www/__pycache__` en G6-L tras verificar contenido |
+| D7 | 2026-11-06 | Base nueva y vacía |
+| D8 | 2026-11-06 | Renombrar GitHub después del despliegue |
+| D9 | 2026-11-06 | Gates G6-P, G6, G6-L y G7 independientes |
+
+## Apéndice B — Cambios de código requeridos
+
+| Archivo | Cambio |
+|---|---|
+| `config/settings.py` | `DATA_DIR`, DB externa, `STATIC_ROOT`, `MEDIA_ROOT`, sin Mongo, `SECRET_KEY` obligatoria, `DEBUG=False`, hosts, seguridad, `timeout` |
+| `config/urls.py` | Quitar servicio `/media/`; añadir vista privada de imagen |
+| `todos/models.py` | `user` no nulo; `to_dict()` sin `.image.url` |
+| `todos/views.py` | `login_required` en vistas web; API 401 JSON sin `login_required`; sin `csrf_exempt`; logout POST; vista `todo_image` |
+| `todos/services.py` | Filtro estricto por propietario; sin `Q(user__isnull=True)` |
+| `todos/admin.py` | Preview de imagen por vista privada |
+| `templates/todos/index.html` | URLs de imagen por `{% url %}` |
+| `todos/migrations/0003_*.py` | `user` obligatorio |
+| `requirements.txt` | Pines exactos; sin Mongo |
+| `.env.example` | Sin Mongo; `DATA_DIR` y `STATIC_ROOT` |
+| `pythonanywhere_wsgi.py` | Ruta absoluta `/home/jzamora/taskpilot` |
+| `todos/db.py` | Eliminar |
+| `todos/tests.py` | Adaptar a autenticación y propiedad |
+| `seed_data.py` | Solo desarrollo; propietario obligatorio |
+| `README.md`, `PYTHONANYWHERE_DEPLOY.md` | Rutas, stack y comandos actualizados |
+
+## Apéndice C — Inventario de recursos a retirar
+
+| Recurso | Ruta | Tamaño | Fase |
+|---|---|---|---|
+| Proyecto TODO | `/home/jzamora/todo_django_mongodb` | 8.7 MB | G6-L |
+| Proyecto blog | `/home/jzamora/sample-web-personal-django2` | 30 MB | G6-L |
+| Venv TODO | `/home/jzamora/.virtualenvs/todo-env` | 99 MB | G6-L |
+| Venv blog | `/home/jzamora/.virtualenvs/webpersonal` | 92 MB | G6-L |
+| Caché WSGI | `/var/www/__pycache__` | ~1 KB | G6-L |
+| Backup | `/home/jzamora/backups/20261107T013845Z` | 6.6 MB | Conservar hasta G7 |
+
+No se eliminan: dominio, Web App, WSGI (se reemplaza), logs ni `README.txt`.
+
+## Apéndice D — Estado de autorizaciones
+
+| Gate | Estado |
+|---|---|
+| G0 | v2 pendiente de aprobación explícita (G0 de v1 aprobado) |
+| G0-B | Ejecutado |
+| G0-T | No autorizado |
+| G0-U | No autorizado |
+| G1 | No autorizado |
+| G2 | No autorizado |
+| G2-GH | No autorizado |
+| G3 | No autorizado |
+| G4 | No autorizado |
+| G5 | No autorizado |
+| G5-P | No autorizado |
+| G6-P | No autorizado |
+| G6 | No autorizado |
+| G6-L | No autorizado |
+| G7 | No autorizado |
+| Auditoría independiente (§8.4) | Pendiente de F1–F5; no es un gate |
+
+**F1–F5 no ejecutadas.** La auditoría de Antigravity se realizará después de F1–F5 y antes de G5-P. Ninguna autorización de esta actualización habilita implementación, publicación o despliegue.

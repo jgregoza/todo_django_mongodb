@@ -1,43 +1,44 @@
-# TODO List Pro — Django 5 & PythonAnywhere
+# TaskPilot — Gestor Personal de Tareas
 
-Una aplicación moderna y completa de lista de tareas (TODO List) construida con **Python 3.12**, **Django 5**, **Tailwind CSS**, soporte para **subida y visualización de imágenes**, API REST completa y lista para desplegar en **PythonAnywhere**.
+TaskPilot es una aplicación moderna y segura de gestión de tareas construida con **Python**, **Django 5.2 LTS**, **SQLite**, **Tailwind CSS** y **Lucide Icons**, optimizada para su despliegue en **PythonAnywhere**.
 
 ---
 
 ## Características Principales
 
-- **Gestión Completa de Tareas (CRUD)**: Creación, lectura, edición y eliminación de tareas.
-- **Soporte de Imágenes**: Adjunta fotos/capturas a cada tarea con visualizador modal integrado (Lightbox).
-- **Prioridades y Categorías**: Niveles de prioridad (Alta, Media, Baja) con badges visuales e insignias de categorías (General, Trabajo, Personal, etc.).
+- **Gestión Completa de Tareas (CRUD)**: Creación, lectura, edición y eliminación de tareas con aislamiento estricto por usuario.
+- **Autenticación y Autorización**: Sistema nativo de login, registro y logout seguro (POST) con protección CSRF en todos los formularios y endpoints.
+- **Soporte de Imágenes Privadas**: Adjunta imágenes a cada tarea con visualizador modal integrado (Lightbox), servidas mediante control de acceso por propietario.
+- **Prioridades y Categorías**: Niveles de prioridad (Alta, Media, Baja) con badges visuales e insignias de categorías (General, Trabajo, Personal, Urgente, etc.).
 - **Fechas Límite**: Control de plazos y visualización de fechas de vencimiento.
-- **Métricas en Tiempo Real**: Tarjetas con conteo total, pendientes, completadas y barra porcentual de progreso.
-- **Filtros y Búsqueda**: Filtrado instantáneo por estado (Todas / Pendientes / Completadas), prioridad, categoría y búsqueda por texto.
-- **API REST Integrada**: Endpoints JSON en `/api/todos/` y `/api/todos/stats/` para integración externa.
-- **Optimizado para PythonAnywhere**: Configuración lista con WSGI, manejo de estáticos y medios, sin necesidad de clusters externos.
+- **Métricas y Estadísticas**: Conteo total, tareas pendientes, completadas y barra porcentual de progreso.
+- **Filtros y Búsqueda**: Filtrado instantáneo por estado, prioridad, categoría y búsqueda por texto.
+- **API REST Protegida**: Endpoints JSON en `/api/todos/` con autenticación obligatoria (401 JSON) y protección CSRF.
+- **Diseñado para PythonAnywhere**: Configuración con SQLite nativo, separación de datos mutables (`DATA_DIR`) y WSGI optimizado.
 
 ---
 
 ## Estructura del Proyecto
 
 ```text
-todo_django_mongodb/
+taskpilot/
 ├── config/                  # Configuración principal de Django (settings, urls, wsgi)
 ├── todos/                   # Aplicación de tareas (modelos, vistas, servicios, tests)
 │   ├── migrations/          # Migraciones de base de datos
-│   ├── models.py            # Modelo TodoTask con soporte de imágenes
-│   ├── services.py          # Lógica de negocio y consultas
-│   ├── views.py             # Vistas HTML y endpoints JSON de la API
+│   ├── models.py            # Modelo TodoTask con soporte de imágenes y propietario
+│   ├── services.py          # Lógica de negocio y consultas aisladas por usuario
+│   ├── views.py             # Vistas HTML, autenticación y endpoints API JSON
 │   ├── urls.py              # Rutas de la aplicación
-│   └── tests.py             # Pruebas unitarias automatizadas
-├── templates/todos/         # Interfaz visual responsive con Tailwind CSS y Lucide Icons
-├── static/                  # Archivos estáticos personalizados
+│   ├── admin.py             # Panel de administración de Django
+│   └── tests.py             # Suite de pruebas automatizadas
+├── templates/todos/         # Plantillas HTML con Tailwind CSS y Lucide Icons
+├── static/                  # Archivos estáticos base
 ├── staticfiles/             # Archivos estáticos recolectados para producción
-├── media/                   # Imágenes subidas por los usuarios
-├── pythonanywhere_wsgi.py   # Plantilla WSGI para PythonAnywhere
-├── PYTHONANYWHERE_DEPLOY.md # Guía paso a paso para desplegar en PythonAnywhere
-├── seed_data.py             # Script para insertar tareas de ejemplo
-├── requirements.txt         # Dependencias del proyecto
-└── manage.py                # CLI de Django
+├── pythonanywhere_wsgi.py   # Plantilla de configuración WSGI para PythonAnywhere
+├── PYTHONANYWHERE_DEPLOY.md # Guía paso a paso para despliegue
+├── seed_data.py             # Script para inicializar tareas de prueba asignadas a un usuario
+├── requirements.txt         # Dependencias exactas de producción
+└── manage.py                # Interfaz CLI de Django
 ```
 
 ---
@@ -50,13 +51,24 @@ En Windows (PowerShell):
 .\.venv\Scripts\Activate.ps1
 ```
 
-### 2. Aplicar migraciones y datos de prueba
-```bash
-python manage.py migrate
-python seed_data.py
+### 2. Configurar el Entorno
+Copia el archivo de variables de entorno y ajusta tus valores locales:
+```powershell
+cp .env.example .env
 ```
 
-### 3. Iniciar el Servidor de Desarrollo
+### 3. Aplicar migraciones
+```bash
+python manage.py migrate
+```
+
+### 4. (Opcional) Crear superusuario y sembrar datos de prueba
+```bash
+python manage.py createsuperuser
+python seed_data.py <tu-usuario>
+```
+
+### 5. Iniciar el Servidor de Desarrollo
 ```bash
 python manage.py runserver
 ```
@@ -67,18 +79,20 @@ Abre en tu navegador: [http://127.0.0.1:8000/](http://127.0.0.1:8000/)
 
 ## Endpoints de la API REST
 
+Todos los endpoints requieren autenticación de sesión y envío de token CSRF para peticiones mutativas (`POST`, `PUT`, `PATCH`, `DELETE`).
+
 | Método | Endpoint | Descripción |
 |---|---|---|
-| `GET` | `/api/todos/` | Listar tareas (soporta `?status=`, `?priority=`, `?category=`, `?q=`) |
-| `POST` | `/api/todos/` | Crear una nueva tarea (soporta multipart con imagen) |
-| `GET` | `/api/todos/<id>/` | Obtener detalle de una tarea |
-| `PUT` | `/api/todos/<id>/` | Actualizar una tarea |
-| `DELETE` | `/api/todos/<id>/` | Eliminar una tarea |
-| `POST` | `/api/todos/<id>/toggle/` | Alternar estado completado/pendiente |
-| `GET` | `/api/todos/stats/` | Resumen estadístico y porcentajes |
+| `GET` | `/api/todos/` | Listar tareas del usuario (`?status=`, `?priority=`, `?category=`, `?q=`) |
+| `POST` | `/api/todos/` | Crear una nueva tarea (JSON o multipart con imagen) |
+| `GET` | `/api/todos/<id>/` | Obtener detalle de una tarea propia |
+| `PUT` | `/api/todos/<id>/` | Actualizar una tarea propia |
+| `DELETE` | `/api/todos/<id>/` | Eliminar una tarea propia |
+| `POST` / `PATCH` | `/api/todos/<id>/toggle/` | Alternar estado completada/pendiente |
+| `GET` | `/api/todos/stats/` | Estadísticas del usuario autenticado |
 
 ---
 
 ## Despliegue en PythonAnywhere
 
-Consulta la guía detallada en [PYTHONANYWHERE_DEPLOY.md](file:///C:/Users/JZAMORA/.gemini/antigravity/scratch/todo_django_mongodb/PYTHONANYWHERE_DEPLOY.md).
+Consulta la guía detallada en [PYTHONANYWHERE_DEPLOY.md](PYTHONANYWHERE_DEPLOY.md).

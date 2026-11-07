@@ -1,13 +1,14 @@
 from django.contrib import admin
+from django.urls import reverse
 from django.utils.html import format_html
 from .models import TodoTask
 
 
 @admin.register(TodoTask)
 class TodoTaskAdmin(admin.ModelAdmin):
-    list_display = ("title", "priority_badge", "category", "completed", "due_date", "image_preview", "created_at")
-    list_filter = ("completed", "priority", "category", "created_at")
-    search_fields = ("title", "description", "category")
+    list_display = ("title", "user", "priority_badge", "category", "completed", "due_date", "image_preview", "created_at")
+    list_filter = ("completed", "priority", "category", "created_at", "user")
+    search_fields = ("title", "description", "category", "user__username")
     list_editable = ("completed",)
 
     def priority_badge(self, obj):
@@ -22,6 +23,7 @@ class TodoTaskAdmin(admin.ModelAdmin):
 
     def image_preview(self, obj):
         if obj.image:
-            return format_html(f'<img src="{obj.image.url}" style="width: 40px; height: 40px; object-fit: cover; border-radius: 6px;" />')
+            image_url = reverse("todo_image", kwargs={"todo_id": obj.pk})
+            return format_html(f'<img src="{image_url}" style="width: 40px; height: 40px; object-fit: cover; border-radius: 6px;" />')
         return "-"
     image_preview.short_description = "Imagen"

@@ -1,95 +1,93 @@
-# Guía de Despliegue en PythonAnywhere (Paso a Paso)
+# Guía de Despliegue de TaskPilot en PythonAnywhere
 
-Esta aplicación fue configurada y optimizada específicamente para funcionar al 100% en **PythonAnywhere**, incluyendo la subida y visualización de imágenes (`media/`), archivos estáticos (`staticfiles/`) y base de datos persistente.
-
----
-
-### ¿Por qué SQLite / MySQL nativo en lugar de MongoDB en PythonAnywhere?
-1. **Sin servidores externos**: PythonAnywhere no aloja MongoDB localmente. Usar MongoDB requeriría crear un cluster externo en MongoDB Atlas y añadir reglas de red.
-2. **Cero latencia**: La base de datos local en PythonAnywhere corre directamente en el almacenamiento del servidor, respondiendo en milisegundos.
-3. **Manejo nativo de Imágenes**: Django ORM gestiona el almacenamiento, validación y rutas de imágenes (`ImageField`) de forma transparente junto al panel de administración.
-4. **Gratuito y sin límites de red**: Compatible con la cuenta gratuita de PythonAnywhere sin depender de listas de puertos externas.
+Esta guía detalla el procedimiento para desplegar **TaskPilot** en **PythonAnywhere** (plan gratuito), utilizando la arquitectura aprobada: **Python 3.10**, **Django 5.2.19 LTS** y **SQLite** con aislamiento seguro de multimedia privada.
 
 ---
 
-## Pasos para Desplegar en PythonAnywhere
+## 1. Arquitectura de Despliegue
 
-### 1. Clonar el repositorio en PythonAnywhere
-1. Inicia sesión en [PythonAnywhere](https://www.pythonanywhere.com/).
-2. Ve a la pestaña **Consoles** y abre una consola **Bash**.
-3. Clona tu repositorio de GitHub:
-   ```bash
-   git clone https://github.com/jgregoza/todo_django_mongodb.git
-   cd todo_django_mongodb
-   ```
+- **Directorio de código**: `/home/<tu-usuario>/taskpilot`
+- **Directorio de datos**: `/home/<tu-usuario>/taskpilot-data` (`db.sqlite3` y carpeta `media/`)
+- **Archivos estáticos**: `/home/<tu-usuario>/taskpilot/staticfiles`
+- **Entorno virtual**: `/home/<tu-usuario>/.virtualenvs/taskpilot-env`
+- **Base de datos**: SQLite relacional nativa gestionada por Django ORM.
+- **Multimedia privada**: No se mapea en la sección de archivos estáticos del panel Web de PythonAnywhere. Se sirve exclusivamente mediante la vista autenticada de Django para garantizar la privacidad de los usuarios.
 
 ---
 
-### 2. Crear y activar el entorno virtual
-En la consola Bash de PythonAnywhere ejecuta:
+## 2. Pasos para el Despliegue
+
+### Paso 1: Clonar el repositorio
+En la consola **Bash** de PythonAnywhere:
 ```bash
-mkvirtualenv --python=/usr/bin/python3.12 todo-env
+git clone https://github.com/jgregoza/todo_django_mongodb.git /home/<tu-usuario>/taskpilot
+cd /home/<tu-usuario>/taskpilot
+```
+
+### Paso 2: Crear el directorio de datos
+```bash
+mkdir -p /home/<tu-usuario>/taskpilot-data/media
+```
+
+### Paso 3: Crear y configurar el entorno virtual (Python 3.10)
+```bash
+mkvirtualenv --python=/usr/bin/python3.10 taskpilot-env
 pip install -r requirements.txt
 ```
 
----
+### Paso 4: Configurar variables de entorno (`.env`)
+Copia la plantilla y define tus claves seguras:
+```bash
+cp .env.example .env
+chmod 600 .env
+nano .env
+```
+Asegúrate de configurar:
+```ini
+SECRET_KEY=clave-secreta-larga-y-aleatoria
+DEBUG=False
+ALLOWED_HOSTS=<tu-usuario>.pythonanywhere.com
+DATA_DIR=/home/<tu-usuario>/taskpilot-data
+STATIC_ROOT=/home/<tu-usuario>/taskpilot/staticfiles
+CSRF_TRUSTED_ORIGINS=https://<tu-usuario>.pythonanywhere.com
+```
 
-### 3. Migrar la base de datos y recolectar archivos estáticos
-Ejecuta en la misma consola:
+### Paso 5: Migraciones y recolección de estáticos
 ```bash
 python manage.py migrate
 python manage.py collectstatic --noinput
-python seed_data.py
 ```
-*(Opcional) Crea un administrador para acceder a `/admin/`:*
+
+*(Opcional) Crear superusuario para el panel de administración:*
 ```bash
 python manage.py createsuperuser
 ```
 
----
-
-### 4. Configurar la pestaña "Web" en PythonAnywhere
-1. Ve a la pestaña **Web** del panel de control de PythonAnywhere.
-2. Si no tienes una app web creada, haz clic en **Add a new web app**, selecciona **Manual configuration** y elige **Python 3.12**.
-3. En la sección **Code**:
-   - **Source code**: `/home/<tu-usuario>/todo_django_mongodb`
-   - **Working directory**: `/home/<tu-usuario>/todo_django_mongodb`
-4. En la sección **Virtualenv**:
-   - Ingresa: `/home/<tu-usuario>/.virtualenvs/todo-env`
-5. En la sección **Static files**:
-   - Agrega dos mapeos:
-     1. **URL**: `/static/`  
-        **Directory**: `/home/<tu-usuario>/todo_django_mongodb/staticfiles`
-     2. **URL**: `/media/`  
-        **Directory**: `/home/<tu-usuario>/todo_django_mongodb/media`
-6. En la sección **Code**, haz clic en el enlace del archivo **WSGI configuration file** (`/var/www/<tu-usuario>_pythonanywhere_com_wsgi.py`), borra todo su contenido y pega lo siguiente (reemplazando `<tu-usuario>` por tu usuario):
-
-```python
-import os
-import sys
-from pathlib import Path
-from dotenv import load_dotenv
-
-path = '/home/<tu-usuario>/todo_django_mongodb'
-if path not in sys.path:
-    sys.path.append(path)
-
-env_file = Path(path) / ".env"
-if env_file.exists():
-    load_dotenv(env_file)
-
-os.environ['DJANGO_SETTINGS_MODULE'] = 'config.settings'
-
-from django.core.wsgi import get_wsgi_application
-application = get_wsgi_application()
+*(Opcional para pruebas) Sembrar datos asignados a un usuario existente:*
+```bash
+python seed_data.py <username>
 ```
-7. Guarda los cambios (**Save**).
 
 ---
 
-### 5. Recargar la aplicación
-Regresa a la pestaña **Web** y presiona el botón verde grande:
-**"Reload <tu-usuario>.pythonanywhere.com"**
+## 3. Configuración en la pestaña "Web"
 
-¡Listo! Tu aplicación estará en línea y accesible en:
-`https://<tu-usuario>.pythonanywhere.com`
+1. Ve a la pestaña **Web** del panel de control de PythonAnywhere.
+2. Si creas una app nueva: selecciona **Manual configuration** y elige **Python 3.10**.
+3. En la sección **Code**:
+   - **Source code**: `/home/<tu-usuario>/taskpilot`
+   - **Working directory**: `/home/<tu-usuario>/taskpilot`
+4. En la sección **Virtualenv**:
+   - `/home/<tu-usuario>/.virtualenvs/taskpilot-env`
+5. En la sección **Static files**:
+   - **URL**: `/static/`
+     **Directory**: `/home/<tu-usuario>/taskpilot/staticfiles`
+   *(Nota de seguridad: **NO** agregues mapeo estático para `/media/`; las imágenes son privadas y se sirven mediante vistas autenticadas).*
+6. En la sección **Code**, haz clic en el enlace del archivo **WSGI configuration file** (`/var/www/<tu-usuario>_pythonanywhere_com_wsgi.py`), reemplaza su contenido por el provisto en `pythonanywhere_wsgi.py` (ajustando la ruta a tu usuario) y guarda los cambios.
+7. Haz clic en el botón verde **"Reload <tu-usuario>.pythonanywhere.com"**.
+
+---
+
+## 4. Verificación
+
+Accede a `https://<tu-usuario>.pythonanywhere.com` para comprobar el correcto funcionamiento de TaskPilot.

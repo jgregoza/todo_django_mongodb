@@ -1,11 +1,12 @@
 """
-Modelos de datos para TODO List.
-Utiliza el ORM nativo de Django para máxima compatibilidad con PythonAnywhere,
+Modelos de datos para TaskPilot.
+Utiliza el ORM relacional de Django con SQLite para máxima compatibilidad con PythonAnywhere,
 soporte nativo de subida de imágenes y cero latencia de conexión.
 """
 
 from django.db import models
 from django.contrib.auth.models import User
+from django.urls import reverse
 
 
 class TodoTask(models.Model):
@@ -21,8 +22,6 @@ class TodoTask(models.Model):
         User,
         on_delete=models.CASCADE,
         related_name="todos",
-        null=True,
-        blank=True,
         verbose_name="Usuario",
     )
     title = models.CharField(max_length=200, verbose_name="Título")
@@ -67,7 +66,11 @@ class TodoTask(models.Model):
             "category": self.category or "General",
             "completed": self.completed,
             "due_date": self.due_date.strftime("%Y-%m-%d") if self.due_date else None,
-            "image_url": self.image.url if self.image else None,
+            "image_url": (
+                reverse("todo_image", kwargs={"todo_id": self.pk})
+                if self.image
+                else None
+            ),
             "username": self.user.username if self.user else None,
             "created_at": self.created_at.strftime("%Y-%m-%d %H:%M") if self.created_at else None,
             "updated_at": self.updated_at.strftime("%Y-%m-%d %H:%M") if self.updated_at else None,
