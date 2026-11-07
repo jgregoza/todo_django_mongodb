@@ -8,14 +8,17 @@ se ejecuta este script en producción.
 
 import os
 import sys
-import django
 from datetime import date, timedelta
+
+import django
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 django.setup()
 
 from django.contrib.auth.models import User
+
 from todos.models import TodoTask
+
 
 def seed(username=None):
     if not username:

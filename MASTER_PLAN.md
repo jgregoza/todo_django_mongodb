@@ -1,4 +1,4 @@
-# MASTER_PLAN.md — Plan maestro de modernización de TaskPilot
+﻿# MASTER_PLAN.md — Plan maestro de modernización de TaskPilot
 
 **Proyecto:** TaskPilot (nombre objetivo; el repositorio actual es `todo_django_mongodb`)
 **Estado:** Actualizado con las decisiones D1–D9 y la validación técnica del 2026-11-06. **No autoriza implementación.**
@@ -856,7 +856,7 @@ No se cierra la modernización si hay acceso cruzado, secreto expuesto, backup s
 
 **Estado actual:**
 
-- **F1–F5 no ejecutadas.**
+- **F1–F5 completadas y validadas bajo G5 autorizado.**
 - **Auditoría independiente de Antigravity pendiente**, después de F1–F5 y antes de G5-P.
 - **G0-B ejecutado.**
 - **G0-T y G0-U no autorizados.**
@@ -866,11 +866,13 @@ No se cierra la modernización si hay acceso cruzado, secreto expuesto, backup s
 **Secuencia:**
 
 1. Revisar y aprobar explícitamente **G0 para v2**.
-2. Solo después, solicitar **G1** para ejecutar F1 (seguridad).
-3. Tras F1–F5, ejecutar la auditoría independiente (§8.4) y resolver los hallazgos bajo la autorización de la fase correspondiente.
-4. Solicitar **G5-P** para publicar `main` y el tag `v1.0.0`.
-5. Solo entonces solicitar **G6-P**, seguido de **G6**, **G6-L** y **G7**, cada uno por separado.
-6. El renombrado de GitHub (**G2-GH**) se solicita después de G6.
+2. **G1–G4 completados:** F1–F4 están implementadas y aprobadas.
+3. **G5 autorizado exclusivamente para F5:** terminar y validar la documentación sin publicar ni desplegar.
+4. Con F1–F5 cerradas, realizar la auditoría independiente de solo lectura (§8.4), después de F1–F5 y antes de G5-P.
+5. Resolver los hallazgos críticos y altos de la auditoría antes de solicitar **G5-P**.
+6. Solicitar **G5-P** por separado para publicar `main` mediante fast-forward y crear el tag anotado `v1.0.0`.
+7. Después de G5-P, solicitar **G6-P**, **G6**, **G6-L** y **G7**, cada uno mediante autorización independiente.
+8. Solicitar el renombrado de GitHub (**G2-GH**) después de G6, con autorización específica.
 
 Ninguna autorización de esta actualización permite implementar, publicar, desplegar ni modificar PythonAnywhere o GitHub. **G6-P, G6, G6-L y G7 siguen sin autorización.**
 
@@ -931,17 +933,17 @@ No se eliminan: dominio, Web App, WSGI (se reemplaza), logs ni `README.txt`.
 | G0-B | Ejecutado |
 | G0-T | No autorizado |
 | G0-U | No autorizado |
-| G1 | No autorizado |
-| G2 | No autorizado |
+| G1 | Completado |
+| G2 | Completado |
 | G2-GH | No autorizado |
-| G3 | No autorizado |
-| G4 | No autorizado |
-| G5 | No autorizado |
+| G3 | Completado |
+| G4 | Completado |
+| G5 | Completado (F5 documental) |
 | G5-P | No autorizado |
 | G6-P | No autorizado |
 | G6 | No autorizado |
 | G6-L | No autorizado |
 | G7 | No autorizado |
-| Auditoría independiente (§8.4) | Pendiente de F1–F5; no es un gate |
+| Auditoría independiente (§8.4) | Pendiente de auditoría independiente; no es un gate |
 
-**F1–F5 no ejecutadas.** La auditoría de Antigravity se realizará después de F1–F5 y antes de G5-P. Ninguna autorización de esta actualización habilita implementación, publicación o despliegue.
+**F1–F5 completadas y validadas bajo G5 autorizado.** La auditoría independiente se realizará después de F1–F5 y antes de G5-P. G5 no autoriza publicación, creación de tags ni despliegue.

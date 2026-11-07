@@ -1,4 +1,5 @@
 from django.urls import path
+
 from . import views
 
 urlpatterns = [
@@ -10,14 +11,20 @@ urlpatterns = [
     path("todos/<int:todo_id>/delete/", views.delete_todo_view, name="delete_todo"),
     path("todos/<int:todo_id>/image/", views.todo_image, name="todo_image"),
 
-    # Autenticación (Logins)
+    # Autenticación
     path("login/", views.login_view, name="login"),
     path("register/", views.register_view, name="register"),
     path("logout/", views.logout_view, name="logout"),
 
-    # REST API endpoints
+    # REST API endpoints (compatibilidad sin prefijo de versión)
     path("api/todos/", views.api_todos, name="api_todos"),
     path("api/todos/stats/", views.api_stats, name="api_stats"),
     path("api/todos/<int:todo_id>/", views.api_todo_detail, name="api_todo_detail"),
     path("api/todos/<int:todo_id>/toggle/", views.api_toggle_todo, name="api_toggle_todo"),
+
+    # REST API v1 endpoints
+    path("api/v1/todos/", views.api_todos, name="api_v1_todos"),
+    path("api/v1/todos/stats/", views.api_stats, name="api_v1_stats"),
+    path("api/v1/todos/<int:todo_id>/", views.api_todo_detail, name="api_v1_todo_detail"),
+    path("api/v1/todos/<int:todo_id>/toggle/", views.api_toggle_todo, name="api_v1_toggle_todo"),
 ]

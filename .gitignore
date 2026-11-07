@@ -29,6 +29,12 @@ staticfiles/
 *.swp
 *.swo
 
+# Coverage & Tooling
+.coverage
+htmlcov/
+.ruff_cache/
+backups/
+
 # OS files
 .DS_Store
 Thumbs.db

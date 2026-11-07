@@ -7,6 +7,7 @@ Copia este contenido en tu archivo de configuración WSGI en la pestaña 'Web' d
 import os
 import sys
 from pathlib import Path
+
 from dotenv import load_dotenv
 
 # Ruta absoluta al proyecto TaskPilot en PythonAnywhere
@@ -23,4 +24,5 @@ if env_file.exists():
 os.environ["DJANGO_SETTINGS_MODULE"] = "config.settings"
 
 from django.core.wsgi import get_wsgi_application
+
 application = get_wsgi_application()

@@ -4,8 +4,8 @@ Utiliza el ORM relacional de Django con SQLite para máxima compatibilidad con P
 soporte nativo de subida de imágenes y cero latencia de conexión.
 """
 
-from django.db import models
 from django.contrib.auth.models import User
+from django.db import models
 from django.urls import reverse
 
 

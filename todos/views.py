@@ -1,21 +1,50 @@
 """
-Vistas web, autenticación de usuarios y endpoints de API.
+Vistas web, autenticación de usuarios y endpoints de API con validaciones robustas, paginación y logging.
 """
 
 import json
+import logging
 import mimetypes
 from functools import wraps
 
 from django.contrib import messages
 from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
+from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
+from django.core.exceptions import ValidationError
 from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods, require_POST
 
-from . import services
+from . import selectors, services
+from .forms import TaskForm
 from .models import TodoTask
+from .validators import validate_api_payload, validate_task_image
+
+logger = logging.getLogger("todos")
+
+
+def _read_api_payload(request, allowed_fields):
+    """Lee y valida datos JSON o formularios de la API."""
+    if request.content_type == "application/json":
+        try:
+            data = json.loads(request.body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return None, JsonResponse(
+                {"error": "JSON no valido en el cuerpo de la solicitud."},
+                status=400,
+            )
+    else:
+        data = request.POST
+
+    try:
+        validate_api_payload(data, allowed_fields)
+    except ValidationError as exc:
+        message = exc.messages[0] if exc.messages else str(exc)
+        return None, JsonResponse({"error": message}, status=400)
+
+    return data, None
+
 
 
 def api_login_required(view_func):
@@ -24,6 +53,7 @@ def api_login_required(view_func):
     @wraps(view_func)
     def wrapper(request, *args, **kwargs):
         if not request.user.is_authenticated:
+            logger.warning("Intento de acceso anónimo a endpoint de API: %s", request.path)
             return JsonResponse({"error": "Autenticación requerida"}, status=401)
         return view_func(request, *args, **kwargs)
 
@@ -32,24 +62,28 @@ def api_login_required(view_func):
 
 @login_required
 def index_view(request):
-    """Vista principal con interfaz visual completa."""
+    """Vista principal con interfaz visual completa y paginación."""
     status = request.GET.get("status", "all")
     priority = request.GET.get("priority", "")
     category = request.GET.get("category", "")
     search = request.GET.get("q", "")
+    page_number = request.GET.get("page", 1)
 
-    todos = services.list_todos(
+    queryset = selectors.list_todos_queryset(
         user=request.user,
         status=status,
         priority=priority,
         category=category,
         search=search,
     )
-    stats = services.get_stats(user=request.user)
-    categories = services.get_categories(user=request.user)
+    page_obj = selectors.paginate_queryset(queryset, page=page_number, per_page=12)
+    todos = [t.to_dict() for t in page_obj]
+    stats = selectors.get_stats(user=request.user)
+    categories = selectors.get_categories(user=request.user)
 
     context = {
         "todos": todos,
+        "page_obj": page_obj,
         "stats": stats,
         "categories": categories,
         "current_status": status,
@@ -63,24 +97,28 @@ def index_view(request):
 @login_required
 @require_http_methods(["POST"])
 def create_todo_view(request):
-    """Acción de formulario web para crear una tarea."""
-    title = request.POST.get("title", "").strip()
-    description = request.POST.get("description", "").strip()
-    priority = request.POST.get("priority", "media")
-    category = request.POST.get("category", "General").strip() or "General"
-    due_date = request.POST.get("due_date", "").strip() or None
-    image = request.FILES.get("image")
+    """Acción de formulario web para crear una tarea con validación en servidor."""
+    form = TaskForm(request.POST, request.FILES)
+    if form.is_valid():
+        try:
+            services.create_todo(
+                title=form.cleaned_data["title"],
+                description=form.cleaned_data.get("description", ""),
+                priority=form.cleaned_data.get("priority", "media"),
+                category=form.cleaned_data.get("category", "General"),
+                due_date=form.cleaned_data.get("due_date"),
+                image=form.cleaned_data.get("image"),
+                user=request.user,
+            )
+            messages.success(request, "Tarea creada exitosamente.")
+        except (ValueError, ValidationError) as e:
+            msg = e.message if hasattr(e, "message") else str(e)
+            messages.error(request, msg)
+    else:
+        for field, errors in form.errors.items():
+            for error in errors:
+                messages.error(request, f"{error}")
 
-    if title:
-        services.create_todo(
-            title=title,
-            description=description,
-            priority=priority,
-            category=category,
-            due_date=due_date,
-            image=image,
-            user=request.user,
-        )
     return redirect("index")
 
 
@@ -94,7 +132,7 @@ def toggle_todo_view(request, todo_id):
             return JsonResponse({"success": False, "error": "Tarea no encontrada"}, status=404)
         raise Http404("Tarea no encontrada")
     if request.headers.get("x-requested-with") == "XMLHttpRequest" or request.headers.get("accept") == "application/json":
-        stats = services.get_stats(user=request.user)
+        stats = selectors.get_stats(user=request.user)
         return JsonResponse({"success": True, "todo": updated, "stats": stats})
     return redirect("index")
 
@@ -102,28 +140,42 @@ def toggle_todo_view(request, todo_id):
 @login_required
 @require_http_methods(["POST"])
 def update_todo_view(request, todo_id):
-    """Acción de formulario web para editar una tarea y su imagen."""
+    """Acción de formulario web para editar una tarea y su imagen con validación."""
     title = request.POST.get("title", "").strip()
-    description = request.POST.get("description", "").strip()
-    priority = request.POST.get("priority", "media")
-    category = request.POST.get("category", "General").strip() or "General"
-    due_date = request.POST.get("due_date", "").strip() or None
+    if not title:
+        messages.error(request, "El título de la tarea es obligatorio.")
+        return redirect("index")
+
     image = request.FILES.get("image")
+    if image:
+        try:
+            validate_task_image(image)
+        except ValidationError as e:
+            messages.error(request, e.message if hasattr(e, "message") else str(e))
+            return redirect("index")
+
     clear_image = request.POST.get("clear_image") == "on"
 
-    updated = services.update_todo(
-        todo_id,
-        title=title,
-        description=description,
-        priority=priority,
-        category=category,
-        due_date=due_date,
-        image=image,
-        clear_image=clear_image,
-        user=request.user,
-    )
+    try:
+        updated = services.update_todo(
+            todo_id,
+            title=title,
+            description=request.POST.get("description", "").strip(),
+            priority=request.POST.get("priority", "media"),
+            category=request.POST.get("category", "General").strip() or "General",
+            due_date=request.POST.get("due_date", "").strip() or None,
+            image=image,
+            clear_image=clear_image,
+            user=request.user,
+        )
+    except (ValueError, ValidationError) as e:
+        messages.error(request, e.message if hasattr(e, "message") else str(e))
+        return redirect("index")
+
     if not updated:
         raise Http404("Tarea no encontrada")
+
+    messages.success(request, "Tarea actualizada correctamente.")
     return redirect("index")
 
 
@@ -137,7 +189,7 @@ def delete_todo_view(request, todo_id):
             return JsonResponse({"success": False, "error": "Tarea no encontrada"}, status=404)
         raise Http404("Tarea no encontrada")
     if request.headers.get("x-requested-with") == "XMLHttpRequest" or request.headers.get("accept") == "application/json":
-        stats = services.get_stats(user=request.user)
+        stats = selectors.get_stats(user=request.user)
         return JsonResponse({"success": True, "stats": stats})
     return redirect("index")
 
@@ -148,6 +200,11 @@ def todo_image(request, todo_id):
     todo = get_object_or_404(TodoTask, id=todo_id)
 
     if not (request.user.is_staff or todo.user_id == request.user.id):
+        logger.warning(
+            "Usuario %s intentó acceder a imagen no autorizada de tarea ID %s",
+            request.user.username,
+            todo_id,
+        )
         raise Http404("Imagen no encontrada")
 
     if not todo.image:
@@ -156,6 +213,7 @@ def todo_image(request, todo_id):
     try:
         image_file = todo.image.open("rb")
     except FileNotFoundError:
+        logger.error("Archivo físico de imagen no encontrado para tarea ID %s", todo_id)
         raise Http404("Imagen no encontrada")
 
     content_type = mimetypes.guess_type(todo.image.name)[0] or "application/octet-stream"
@@ -176,9 +234,11 @@ def login_view(request):
         if form.is_valid():
             user = form.get_user()
             login(request, user)
+            logger.info("Inicio de sesión exitoso: %s", user.username)
             messages.success(request, f"¡Bienvenido de nuevo, {user.username}!")
             return redirect("index")
         else:
+            logger.warning("Fallo en inicio de sesión para formulario enviado.")
             messages.error(request, "Usuario o contraseña incorrectos.")
     else:
         form = AuthenticationForm()
@@ -196,6 +256,7 @@ def register_view(request):
         if form.is_valid():
             user = form.save()
             login(request, user)
+            logger.info("Nueva cuenta registrada: %s", user.username)
             messages.success(request, f"¡Cuenta creada con éxito! Bienvenido, {user.username}.")
             return redirect("index")
         else:
@@ -209,7 +270,9 @@ def register_view(request):
 @require_POST
 def logout_view(request):
     """Cierre de sesión; solo por POST y con CSRF."""
+    username = request.user.username if request.user.is_authenticated else "anónimo"
     logout(request)
+    logger.info("Sesión cerrada para: %s", username)
     messages.info(request, "Has cerrado sesión correctamente.")
     return redirect("login")
 
@@ -221,46 +284,79 @@ def logout_view(request):
 @api_login_required
 @require_http_methods(["GET", "POST"])
 def api_todos(request):
-    """API para listar y crear tareas vía JSON o multipart."""
+    """API para listar y crear tareas vía JSON o multipart, con soporte de paginación."""
     if request.method == "GET":
         status = request.GET.get("status", "all")
         priority = request.GET.get("priority", "")
         category = request.GET.get("category", "")
         search = request.GET.get("q", "")
-        todos = services.list_todos(user=request.user, status=status, priority=priority, category=category, search=search)
+        page = request.GET.get("page")
+
+        queryset = selectors.list_todos_queryset(
+            user=request.user,
+            status=status,
+            priority=priority,
+            category=category,
+            search=search,
+        )
+
+        if page is not None:
+            per_page = request.GET.get("per_page") or request.GET.get("page_size") or 10
+            try:
+                per_page = int(per_page)
+            except (ValueError, TypeError):
+                per_page = 10
+
+            page_obj = selectors.paginate_queryset(queryset, page=page, per_page=per_page)
+            return JsonResponse({
+                "todos": [t.to_dict() for t in page_obj],
+                "count": queryset.count(),
+                "page": page_obj.number,
+                "total_pages": page_obj.paginator.num_pages,
+                "has_next": page_obj.has_next(),
+                "has_previous": page_obj.has_previous(),
+            })
+
+        todos = [t.to_dict() for t in queryset]
         return JsonResponse({"todos": todos, "count": len(todos)})
 
     elif request.method == "POST":
         image = request.FILES.get("image")
         if request.content_type == "application/json":
-            try:
-                data = json.loads(request.body.decode("utf-8"))
-            except Exception:
-                data = {}
+            data, error_response = _read_api_payload(
+                request,
+                ("title", "description", "priority", "category", "due_date"),
+            )
+            if error_response:
+                return error_response
         else:
             data = request.POST
 
-        title = data.get("title", "").strip()
+        title = (data.get("title") or "").strip()
         if not title:
-            return JsonResponse({"error": "El título es obligatorio"}, status=400)
+            return JsonResponse({"error": "El título de la tarea es obligatorio"}, status=400)
 
-        todo = services.create_todo(
-            title=title,
-            description=data.get("description", ""),
-            priority=data.get("priority", "media"),
-            category=data.get("category", "General"),
-            due_date=data.get("due_date"),
-            image=image,
-            user=request.user,
-        )
-        return JsonResponse(todo, status=201)
+        try:
+            todo = services.create_todo(
+                title=title,
+                description=data.get("description", ""),
+                priority=data.get("priority", "media"),
+                category=data.get("category", "General"),
+                due_date=data.get("due_date"),
+                image=image,
+                user=request.user,
+            )
+            return JsonResponse(todo, status=201)
+        except (ValueError, ValidationError) as e:
+            msg = e.message if hasattr(e, "message") else str(e)
+            return JsonResponse({"error": msg}, status=400)
 
 
 @api_login_required
 @require_http_methods(["GET", "PUT", "DELETE"])
 def api_todo_detail(request, todo_id):
     """API para ver, actualizar o borrar tarea específica."""
-    todo = services.get_todo(todo_id, user=request.user)
+    todo = selectors.get_todo(todo_id, user=request.user)
     if not todo:
         return JsonResponse({"error": "Tarea no encontrada"}, status=404)
 
@@ -268,22 +364,33 @@ def api_todo_detail(request, todo_id):
         return JsonResponse(todo)
 
     elif request.method == "PUT":
-        try:
-            data = json.loads(request.body.decode("utf-8"))
-        except Exception:
+        if request.content_type == "application/json":
+            data, error_response = _read_api_payload(
+                request,
+                ("title", "description", "priority", "category", "completed", "due_date"),
+            )
+            if error_response:
+                return error_response
+        else:
             data = request.POST
 
-        updated = services.update_todo(
-            todo_id,
-            title=data.get("title"),
-            description=data.get("description"),
-            priority=data.get("priority"),
-            category=data.get("category"),
-            completed=data.get("completed"),
-            due_date=data.get("due_date"),
-            user=request.user,
-        )
-        return JsonResponse(updated)
+        try:
+            updated = services.update_todo(
+                todo_id,
+                title=data.get("title"),
+                description=data.get("description"),
+                priority=data.get("priority"),
+                category=data.get("category"),
+                completed=data.get("completed"),
+                due_date=data.get("due_date"),
+                user=request.user,
+            )
+            if not updated:
+                return JsonResponse({"error": "Tarea no encontrada"}, status=404)
+            return JsonResponse(updated)
+        except (ValueError, ValidationError) as e:
+            msg = e.message if hasattr(e, "message") else str(e)
+            return JsonResponse({"error": msg}, status=400)
 
     elif request.method == "DELETE":
         services.delete_todo(todo_id, user=request.user)
@@ -304,5 +411,5 @@ def api_toggle_todo(request, todo_id):
 @require_http_methods(["GET"])
 def api_stats(request):
     """API con estadísticas generales."""
-    stats = services.get_stats(user=request.user)
+    stats = selectors.get_stats(user=request.user)
     return JsonResponse(stats)

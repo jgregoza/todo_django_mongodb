@@ -4,8 +4,9 @@ WSGI config for config project.
 
 import os
 from pathlib import Path
-from dotenv import load_dotenv
+
 from django.core.wsgi import get_wsgi_application
+from dotenv import load_dotenv
 
 # Cargar variables de entorno desde .env
 BASE_DIR = Path(__file__).resolve().parent.parent
