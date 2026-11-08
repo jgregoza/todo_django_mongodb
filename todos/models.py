@@ -8,6 +8,66 @@ from django.contrib.auth.models import User
 from django.db import models
 from django.urls import reverse
 
+MAX_CATEGORY_LENGTH = 50
+
+
+def normalize_category_name(value):
+    """Normaliza una categoría para compararla sin distinguir mayúsculas ni espacios."""
+    return " ".join((value or "").split()).casefold()
+
+
+def clean_category_name(value, default="General"):
+    """Limpia y valida el nombre visible de una categoría."""
+    cleaned = " ".join((value or "").split())
+    if not cleaned:
+        cleaned = default
+    if len(cleaned) > MAX_CATEGORY_LENGTH:
+        raise ValueError(
+            f"La categoría no puede superar {MAX_CATEGORY_LENGTH} caracteres."
+        )
+    return cleaned
+
+
+class Category(models.Model):
+    """Categoría privada de un usuario, única por nombre normalizado."""
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="task_categories",
+        verbose_name="Usuario",
+    )
+    name = models.CharField(max_length=MAX_CATEGORY_LENGTH, verbose_name="Nombre")
+    normalized_name = models.CharField(
+        max_length=MAX_CATEGORY_LENGTH * 3,
+        editable=False,
+        verbose_name="Nombre normalizado",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de creación")
+
+    class Meta:
+        verbose_name = "Categoría"
+        verbose_name_plural = "Categorías"
+        ordering = ["name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "normalized_name"],
+                name="unique_category_per_user",
+            ),
+            models.CheckConstraint(
+                condition=~models.Q(normalized_name=""),
+                name="category_normalized_name_not_empty",
+            ),
+        ]
+
+    def __str__(self):
+        return self.name
+
+    def save(self, *args, **kwargs):
+        self.name = clean_category_name(self.name)
+        self.normalized_name = normalize_category_name(self.name)
+        super().save(*args, **kwargs)
+
 
 class TodoTask(models.Model):
     """Modelo de tarea con soporte para imágenes, prioridades y usuarios."""

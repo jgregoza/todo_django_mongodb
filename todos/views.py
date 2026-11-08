@@ -6,6 +6,7 @@ import json
 import logging
 import mimetypes
 from functools import wraps
+from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.contrib.auth import login, logout
@@ -18,7 +19,7 @@ from django.views.decorators.http import require_http_methods, require_POST
 
 from . import selectors, services
 from .forms import TaskForm
-from .models import TodoTask
+from .models import TodoTask, clean_category_name
 from .validators import validate_api_payload, validate_task_image
 
 logger = logging.getLogger("todos")
@@ -90,7 +91,19 @@ def index_view(request):
         "current_priority": priority,
         "current_category": category,
         "search_query": search,
+        "filter_query": urlencode(
+            {
+                "status": status,
+                "priority": priority,
+                "category": category,
+                "q": search,
+            }
+        ),
     }
+
+    # Los filtros dinámicos solicitan solo el fragmento del listado.
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return render(request, "todos/_task_list.html", context)
     return render(request, "todos/index.html", context)
 
 
@@ -156,13 +169,20 @@ def update_todo_view(request, todo_id):
 
     clear_image = request.POST.get("clear_image") == "on"
 
+    category = request.POST.get("category", "General").strip() or "General"
+    try:
+        category = clean_category_name(category)
+    except ValueError as e:
+        messages.error(request, str(e))
+        return redirect("index")
+
     try:
         updated = services.update_todo(
             todo_id,
             title=title,
             description=request.POST.get("description", "").strip(),
             priority=request.POST.get("priority", "media"),
-            category=request.POST.get("category", "General").strip() or "General",
+            category=category,
             due_date=request.POST.get("due_date", "").strip() or None,
             image=image,
             clear_image=clear_image,
@@ -306,6 +326,7 @@ def api_todos(request):
                 per_page = int(per_page)
             except (ValueError, TypeError):
                 per_page = 10
+            per_page = max(1, min(per_page, 100))
 
             page_obj = selectors.paginate_queryset(queryset, page=page, per_page=per_page)
             return JsonResponse({
@@ -374,13 +395,20 @@ def api_todo_detail(request, todo_id):
         else:
             data = request.POST
 
+        category = data.get("category")
+        if isinstance(category, str) and category.strip():
+            try:
+                category = clean_category_name(category)
+            except ValueError as e:
+                return JsonResponse({"error": str(e)}, status=400)
+
         try:
             updated = services.update_todo(
                 todo_id,
                 title=data.get("title"),
                 description=data.get("description"),
                 priority=data.get("priority"),
-                category=data.get("category"),
+                category=category,
                 completed=data.get("completed"),
                 due_date=data.get("due_date"),
                 user=request.user,

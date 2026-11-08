@@ -5,9 +5,9 @@ Capa de servicios (mutaciones de dominio y transacciones) para TaskPilot.
 import logging
 from datetime import datetime
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 
-from .models import TodoTask
+from .models import Category, TodoTask, clean_category_name, normalize_category_name
 from .selectors import (
     _user_todos,
     get_categories,
@@ -29,11 +29,34 @@ __all__ = [
     "get_todo",
     "get_categories",
     "get_stats",
+    "resolve_category",
     "create_todo",
     "update_todo",
     "toggle_todo",
     "delete_todo",
 ]
+
+
+def resolve_category(user, name):
+    """
+    Devuelve el nombre canónico de una categoría del usuario.
+
+    La búsqueda y creación siempre se limitan al usuario autenticado, por lo que
+    nunca se reutiliza una categoría ajena. La restricción única de base de datos
+    evita duplicados ante solicitudes simultáneas.
+    """
+    cleaned = clean_category_name(name)
+    normalized = normalize_category_name(cleaned)
+
+    try:
+        # El savepoint mantiene usable la transacción externa si otra solicitud
+        # crea la misma categoría al mismo tiempo.
+        with transaction.atomic():
+            return Category.objects.create(user=user, name=cleaned).name
+    except IntegrityError:
+        return Category.objects.get(
+            user=user, normalized_name=normalized
+        ).name
 
 
 def _delete_file_safely(storage, name):
@@ -76,26 +99,30 @@ def create_todo(
         elif hasattr(due_date, "strftime"):
             parsed_due = due_date
 
+    category_clean = clean_category_name(category)
+
     if image:
         validate_task_image(image)
 
-    todo = TodoTask(
-        user=user,
-        title=title_clean,
-        description=description.strip() if description else "",
-        priority=priority if priority in ("baja", "media", "alta") else "media",
-        category=category.strip() if category else "General",
-        due_date=parsed_due,
-        image=image if image else None,
-    )
+    todo = None
 
     try:
         with transaction.atomic(durable=True):
+            todo = TodoTask(
+                user=user,
+                title=title_clean,
+                description=description.strip() if description else "",
+                priority=priority if priority in ("baja", "media", "alta") else "media",
+                category=resolve_category(user, category_clean),
+                due_date=parsed_due,
+                image=image if image else None,
+            )
             todo.save()
             result = todo.to_dict()
     except Exception:
         if (
-            todo.image
+            todo
+            and todo.image
             and todo.image.name
             and getattr(todo.image, "_committed", False)
         ):
@@ -124,6 +151,12 @@ def update_todo(
     new_image_storage = None
 
     try:
+        category_clean = (
+            clean_category_name(category)
+            if category is not None and category.strip()
+            else None
+        )
+
         with transaction.atomic(durable=True):
             todo = _user_todos(user).get(id=todo_id)
             old_image_name = todo.image.name if todo.image else None
@@ -143,8 +176,8 @@ def update_todo(
             if priority is not None and priority in ("baja", "media", "alta"):
                 todo.priority = priority
 
-            if category is not None and category.strip():
-                todo.category = category.strip()
+            if category_clean is not None:
+                todo.category = resolve_category(user, category_clean)
 
             if completed is not None:
                 todo.completed = parse_bool(completed)

@@ -6,7 +6,7 @@ Separación limpia de responsabilidades (Clean Architecture / CQRS).
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db.models import Q
 
-from .models import TodoTask
+from .models import Category, TodoTask
 
 
 def _user_todos(user):
@@ -73,12 +73,19 @@ def get_todo(todo_id, user=None):
 
 
 def get_categories(user=None):
-    """Devuelve las categorías únicas disponibles para el usuario."""
-    defaults = {"General", "Trabajo", "Personal", "Estudio", "Urgente"}
-    queryset = _user_todos(user)
-    existing = set(queryset.values_list("category", flat=True).distinct())
-    all_cats = defaults.union({c for c in existing if c})
-    return sorted(list(all_cats))
+    """Devuelve solo las categorías registradas o usadas por el usuario."""
+    if not user or not user.is_authenticated:
+        return []
+
+    registered = set(
+        Category.objects.filter(user=user).values_list("name", flat=True)
+    )
+    used = set(
+        _user_todos(user)
+        .exclude(category="")
+        .values_list("category", flat=True)
+    )
+    return sorted(registered | used)
 
 
 def get_stats(user=None):

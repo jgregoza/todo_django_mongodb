@@ -4,7 +4,7 @@ Formularios de validación para tareas en TaskPilot.
 
 from django import forms
 
-from .models import TodoTask
+from .models import TodoTask, clean_category_name
 from .validators import validate_task_image
 
 
@@ -14,6 +14,11 @@ class TaskForm(forms.ModelForm):
     class Meta:
         model = TodoTask
         fields = ["title", "description", "priority", "category", "due_date", "image"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Una categoría vacía se normaliza a "General" en clean_category().
+        self.fields["category"].required = False
 
     def clean_title(self):
         title = self.cleaned_data.get("title", "").strip()
@@ -30,8 +35,10 @@ class TaskForm(forms.ModelForm):
         return priority
 
     def clean_category(self):
-        category = self.cleaned_data.get("category", "").strip()
-        return category if category else "General"
+        try:
+            return clean_category_name(self.cleaned_data.get("category", ""))
+        except ValueError as exc:
+            raise forms.ValidationError(str(exc)) from exc
 
     def clean_image(self):
         image = self.cleaned_data.get("image")

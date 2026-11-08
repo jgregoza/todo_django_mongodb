@@ -18,6 +18,7 @@ django.setup()
 from django.contrib.auth.models import User
 
 from todos.models import TodoTask
+from todos.services import resolve_category
 
 
 def seed(username=None):
@@ -71,7 +72,8 @@ def seed(username=None):
     ]
 
     for item in sample_tasks:
-        TodoTask.objects.create(user=user, **item)
+        category = resolve_category(user, item["category"])
+        TodoTask.objects.create(user=user, **{**item, "category": category})
 
     print(f"[OK] Se crearon {len(sample_tasks)} tareas de prueba para '{username}'.")
 
