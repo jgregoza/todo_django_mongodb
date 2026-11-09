@@ -58,14 +58,14 @@ jobs:
         run: |
           set -euo pipefail
           URL="https://www.pythonanywhere.com/api/v0/user/$PA_USER/files/path$MARKER_PATH"
-          CODE=$(curl -sS -o "$RUNNER_TEMP/marker.json" -w '%{http_code}' -X POST \
+          printf '%s' "$TARGET_SHA" | curl -sS --fail-with-body \
+            -o "$RUNNER_TEMP/marker.json" \
             -H "Authorization: Token $PA_API_TOKEN" \
-            -F "content=$TARGET_SHA" "$URL")
-          cat "$RUNNER_TEMP/marker.json" || true
-          case "$CODE" in
-            200|201) echo "Marcador escrito (HTTP $CODE)." ;;
-            *) echo "::error::La Files API devolvió HTTP $CODE"; exit 1 ;;
-          esac
+            -F "content=@-;filename=last_ci_ok_sha" \
+            "$URL"
+          cat "$RUNNER_TEMP/marker.json" 2>/dev/null || true
+          echo
+          echo "Marcador publicado."
 
       - name: Verificar el marcador
         env:
