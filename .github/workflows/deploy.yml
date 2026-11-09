@@ -58,13 +58,22 @@ jobs:
         run: |
           set -euo pipefail
           URL="https://www.pythonanywhere.com/api/v0/user/$PA_USER/files/path$MARKER_PATH"
-          printf '%s' "$TARGET_SHA" | curl -sS --fail-with-body \
+          SHA_FILE="$RUNNER_TEMP/last_ci_ok_sha"
+          printf '%s' "$TARGET_SHA" > "$SHA_FILE"
+          CURL_EXIT=0
+          curl -sS --fail-with-body \
             -o "$RUNNER_TEMP/marker.json" \
             -H "Authorization: Token $PA_API_TOKEN" \
-            -F "content=@-;filename=last_ci_ok_sha" \
-            "$URL"
+            -F "content=@$SHA_FILE" \
+            "$URL" || CURL_EXIT=$?
+          echo "--- respuesta de la Files API (HTTP body) ---"
           cat "$RUNNER_TEMP/marker.json" 2>/dev/null || true
           echo
+          echo "curl exit code: $CURL_EXIT"
+          if [ "$CURL_EXIT" -ne 0 ]; then
+            echo "::error::La Files API devolvió un error HTTP (curl exit $CURL_EXIT)."
+            exit 1
+          fi
           echo "Marcador publicado."
 
       - name: Verificar el marcador
