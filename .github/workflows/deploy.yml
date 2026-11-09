@@ -61,7 +61,7 @@ jobs:
           SHA_FILE="$RUNNER_TEMP/last_ci_ok_sha"
           printf '%s' "$TARGET_SHA" > "$SHA_FILE"
           CURL_EXIT=0
-          curl -sS --fail-with-body \
+          curl --http1.1 -sS --fail-with-body \
             -o "$RUNNER_TEMP/marker.json" \
             -H "Authorization: Token $PA_API_TOKEN" \
             -F "content=@$SHA_FILE" \
