@@ -64,7 +64,8 @@ jobs:
           curl --http1.1 -sS --fail-with-body \
             -o "$RUNNER_TEMP/marker.json" \
             -H "Authorization: Token $PA_API_TOKEN" \
-            -F "content=@$SHA_FILE" \
+            -H "User-Agent: TaskPilot-Deploy/1.0" \
+            -F "content=@$SHA_FILE;type=text/plain" \
             "$URL" || CURL_EXIT=$?
           echo "--- respuesta de la Files API (HTTP body) ---"
           cat "$RUNNER_TEMP/marker.json" 2>/dev/null || true
