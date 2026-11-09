@@ -1,0 +1,81 @@
+name: Deploy
+
+# No despliega desde GitHub: publica el SHA aprobado por CI en un archivo del
+# servidor (Files API) y la tarea programada de PythonAnywhere lo despliega a
+# las 09:00 UTC. El plan gratuito no permite SSH, así que el `git merge` solo
+# puede iniciarse desde dentro de PythonAnywhere.
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-approval
+  cancel-in-progress: false
+
+jobs:
+  approve:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment:
+      name: production
+      url: https://jzamora.pythonanywhere.com
+    env:
+      PA_USER: ${{ vars.PA_USERNAME }}
+      TARGET_SHA: ${{ github.event.workflow_run.head_sha }}
+      MARKER_PATH: /home/${{ vars.PA_USERNAME }}/taskpilot-data/last_ci_ok_sha
+
+    steps:
+      - name: Validar configuración
+        env:
+          PA_API_TOKEN: ${{ secrets.PA_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in PA_API_TOKEN PA_USER TARGET_SHA MARKER_PATH; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Falta $name (secret PA_API_TOKEN o variable PA_USERNAME)."
+              missing=1
+            fi
+          done
+          [ "$missing" -eq 0 ] || exit 1
+          case "$TARGET_SHA" in
+            *[!0-9a-f]*) echo "::error::SHA inesperado: $TARGET_SHA"; exit 1 ;;
+          esac
+          [ "${#TARGET_SHA}" -eq 40 ] || { echo "::error::SHA de longitud inesperada."; exit 1; }
+
+      - name: Publicar el SHA aprobado (Files API)
+        env:
+          PA_API_TOKEN: ${{ secrets.PA_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          URL="https://www.pythonanywhere.com/api/v0/user/$PA_USER/files/path$MARKER_PATH"
+          CODE=$(curl -sS -o "$RUNNER_TEMP/marker.json" -w '%{http_code}' -X POST \
+            -H "Authorization: Token $PA_API_TOKEN" \
+            -F "content=$TARGET_SHA" "$URL")
+          cat "$RUNNER_TEMP/marker.json" || true
+          case "$CODE" in
+            200|201) echo "Marcador escrito (HTTP $CODE)." ;;
+            *) echo "::error::La Files API devolvió HTTP $CODE"; exit 1 ;;
+          esac
+
+      - name: Verificar el marcador
+        env:
+          PA_API_TOKEN: ${{ secrets.PA_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          URL="https://www.pythonanywhere.com/api/v0/user/$PA_USER/files/path$MARKER_PATH"
+          STORED=$(curl -fsS -H "Authorization: Token $PA_API_TOKEN" "$URL" | tr -d '[:space:]')
+          if [ "$STORED" != "$TARGET_SHA" ]; then
+            echo "::error::El marcador contiene '$STORED' y se esperaba '$TARGET_SHA'."
+            exit 1
+          fi
+          echo "Marcador verificado: $TARGET_SHA"

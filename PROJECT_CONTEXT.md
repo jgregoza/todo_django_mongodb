@@ -50,6 +50,41 @@ git diff --check
 
 `.github/workflows/ci.yml` ejecuta en cada push o PR a `main`: `check`, `makemigrations --check`, `test` y `ruff`. No usa secretos: `DEBUG=True` (para evitar redirecciones HTTPS en tests), `SECRET_KEY` dummy y `DATA_DIR` temporal.
 
+## Despliegue automático (plan gratuito, sin SSH)
+
+El plan gratuito de PythonAnywhere no incluye SSH, por lo que el despliegue
+se orquesta con un **marcador** y una **tarea programada diaria** (09:00 UTC):
+
+1. `CI` (existente) termina en verde sobre `main`.
+2. `.github/workflows/deploy.yml` escribe el SHA aprobado en
+   `~/taskpilot-data/last_ci_ok_sha` mediante la Files API (POST multipart).
+3. La tarea programada
+   `/home/jzamora/.virtualenvs/taskpilot-env/bin/python /home/jzamora/taskpilot/deploy_task.py`
+   ejecuta el despliegue:
+   - lee el marcador y verifica que el SHA siga en la historia de `main`;
+   - aborta si `HEAD` ya está en ese SHA (salvo `--force`);
+   - `git fetch` + `git merge --ff-only <sha>` (nunca retrocede ni diverge);
+   - `pip install -r requirements.txt` solo si cambió `requirements.txt`;
+   - respaldo SQLite con rotación (3 copias) + `PRAGMA integrity_check`;
+   - `migrate --noinput` y `collectstatic --noinput`;
+   - recarga la web app por la API con `$API_TOKEN`;
+   - escribe `last_deployed_sha` y un log.
+
+Credenciales: secret `PA_API_TOKEN` y variable `PA_USERNAME` en GitHub. En el
+servidor no se almacena ningún secreto (`$API_TOKEN` está pre-poblado en
+consolas y tareas).
+
+Límites del plan gratuito relevantes: una tarea diaria (hasta 24 h de retraso),
+100 CPU-s/día, 512 MiB de disco (la rotación de backups es obligatoria) y la
+web app caduca mensualmente y debe renovarse.
+
+Despliegue manual inmediato: `python ~/taskpilot/deploy_task.py` en la consola
+Bash (o con `--force` para re-ejecutar). Rollback: `git revert` en `main`
+(pasa por CI y por el flujo normal); evita `git checkout`, que deja el clon en
+*detached HEAD* y bloquea el `merge --ff-only` de la tarea.
+
+Opciones del script: `--check`, `--dry-run`, `--sha <sha>`, `--force`.
+
 ## Despliegue en PythonAnywhere
 
 | Componente | Ruta |
