@@ -58,23 +58,41 @@ jobs:
         run: |
           set -euo pipefail
           URL="https://www.pythonanywhere.com/api/v0/user/$PA_USER/files/path$MARKER_PATH"
-          SHA_FILE="$RUNNER_TEMP/last_ci_ok_sha"
-          printf '%s' "$TARGET_SHA" > "$SHA_FILE"
-          CURL_EXIT=0
-          curl --http1.1 -sS --fail-with-body \
-            -o "$RUNNER_TEMP/marker.json" \
-            -H "Authorization: Token $PA_API_TOKEN" \
-            -H "User-Agent: TaskPilot-Deploy/1.0" \
-            -F "content=@$SHA_FILE;type=text/plain" \
-            "$URL" || CURL_EXIT=$?
-          echo "--- respuesta de la Files API (HTTP body) ---"
-          cat "$RUNNER_TEMP/marker.json" 2>/dev/null || true
-          echo
-          echo "curl exit code: $CURL_EXIT"
-          if [ "$CURL_EXIT" -ne 0 ]; then
-            echo "::error::La Files API devolvió un error HTTP (curl exit $CURL_EXIT)."
-            exit 1
-          fi
+          python3 - "$URL" "$TARGET_SHA" "$PA_API_TOKEN" <<'PY'
+          import sys, urllib.request, urllib.error
+
+          url, sha, token = sys.argv[1], sys.argv[2], sys.argv[3]
+          boundary = "----TaskPilotBoundary7MA4YWxkTrZu0gW"
+          body = (
+              f"--{boundary}\r\n"
+              f'Content-Disposition: form-data; name="content"; filename="last_ci_ok_sha"\r\n'
+              f"Content-Type: text/plain\r\n\r\n"
+              f"{sha}\r\n"
+              f"--{boundary}--\r\n"
+          ).encode("utf-8")
+          req = urllib.request.Request(
+              url,
+              data=body,
+              method="POST",
+              headers={
+                  "Authorization": f"Token {token}",
+                  "Content-Type": f"multipart/form-data; boundary={boundary}",
+                  "Content-Length": str(len(body)),
+                  "User-Agent": "pythonanywhere-core/0.0.0 (Python/3.10)",
+                  "Accept": "*/*",
+              },
+          )
+          try:
+              with urllib.request.urlopen(req, timeout=60) as resp:
+                  print(f"HTTP {resp.status}")
+                  print(resp.read().decode("utf-8", "replace"))
+                  if resp.status not in (200, 201):
+                      raise SystemExit(1)
+          except urllib.error.HTTPError as e:
+              print(f"HTTP {e.code}")
+              print(e.read().decode("utf-8", "replace"))
+              raise SystemExit(1)
+          PY
           echo "Marcador publicado."
 
       - name: Verificar el marcador
