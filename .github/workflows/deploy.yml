@@ -61,7 +61,7 @@ jobs:
           python3 - "$URL" "$TARGET_SHA" "$PA_API_TOKEN" <<'PY'
           import sys, urllib.request, urllib.error
 
-          url, sha, token = sys.argv[1], sys.argv[2], sys.argv[3]
+          url, sha, token = sys.argv[1], sys.argv[2], sys.argv[3].strip()
           boundary = "----TaskPilotBoundary7MA4YWxkTrZu0gW"
           body = (
               f"--{boundary}\r\n"
@@ -101,6 +101,7 @@ jobs:
         run: |
           set -euo pipefail
           URL="https://www.pythonanywhere.com/api/v0/user/$PA_USER/files/path$MARKER_PATH"
+          PA_API_TOKEN="$(printf '%s' "$PA_API_TOKEN" | tr -d '\r\n')"
           STORED=$(curl -fsS -H "Authorization: Token $PA_API_TOKEN" "$URL" | tr -d '[:space:]')
           if [ "$STORED" != "$TARGET_SHA" ]; then
             echo "::error::El marcador contiene '$STORED' y se esperaba '$TARGET_SHA'."
