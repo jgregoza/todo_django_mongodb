@@ -197,10 +197,10 @@ def install_requirements(logger: logging.Logger) -> None:
         raise DeployError(f"pip install falló: {detail}")
 
 
-def run_manage(command: str, logger: logging.Logger) -> None:
+def run_manage(command: str, logger: logging.Logger, *args: str) -> None:
     logger.info("manage.py %s", command)
     result = subprocess.run(
-        [sys.executable, "manage.py", command, "--noinput"],
+        [sys.executable, "manage.py", command, *args],
         cwd=APP_DIR,
         text=True,
         capture_output=True,
@@ -273,7 +273,7 @@ def deploy(args: argparse.Namespace, logger: logging.Logger) -> int:
         mode = "check" if args.check else "dry-run"
         logger.info("[%s] merge --ff-only %s", mode, target)
         logger.info("[%s] respaldo en %s", mode, backup_dir / "db_<UTC>.sqlite3")
-        logger.info("[%s] pip si cambió requirements.txt, migrate, collectstatic, reload", mode)
+        logger.info("[%s] pip si cambió requirements.txt, migrate, collectstatic, clearsessions, reload", mode)
         return 0
 
     if head != target:
@@ -287,8 +287,9 @@ def deploy(args: argparse.Namespace, logger: logging.Logger) -> int:
     backup = backup_database(db_path, backup_dir, logger)
     rotate_backups(backup.parent, BACKUPS_TO_KEEP, logger)
 
-    run_manage("migrate", logger)
-    run_manage("collectstatic", logger)
+    run_manage("migrate", logger, "--noinput")
+    run_manage("collectstatic", logger, "--noinput")
+    run_manage("clearsessions", logger)
     reload_webapp(logger)
 
     write_sha(deployed, target)

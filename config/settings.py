@@ -130,6 +130,26 @@ CSRF_COOKIE_SAMESITE = "Lax"
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"
 
+# Sesiones: caducan por inactividad (8 h por defecto, configurable con
+# SESSION_COOKIE_AGE) y al cerrar el navegador. SESSION_SAVE_EVERY_REQUEST
+# renueva la caducidad en cada petición, así una sesión activa no se corta a
+# mitad de una tarea. El backend cached_db usa la caché y conserva la BD como
+# respaldo (los reloads de PythonAnywhere vacían la caché local).
+SESSION_ENGINE = "django.contrib.sessions.backends.cached_db"
+SESSION_COOKIE_AGE = int(os.getenv("SESSION_COOKIE_AGE") or 8 * 60 * 60)
+SESSION_SAVE_EVERY_REQUEST = True
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+
+# Caché en memoria por proceso. Se declara explícitamente para fijar el
+# timeout y poder cambiarla sin tocar código.
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "taskpilot",
+        "TIMEOUT": int(os.getenv("CACHE_TIMEOUT") or 300),
+    }
+}
+
 CSRF_TRUSTED_ORIGINS = [
     origin.strip()
     for origin in os.getenv(

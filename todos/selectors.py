@@ -36,7 +36,9 @@ def list_todos_queryset(user=None, status="all", priority="", category="", searc
             Q(title__icontains=search) | Q(description__icontains=search)
         )
 
-    return queryset.order_by("-created_at")
+    # `-id` desempata las tareas creadas en el mismo instante y hace estable
+    # la paginación (sin él, el orden dentro del empate es arbitrario).
+    return queryset.order_by("-created_at", "-id")
 
 
 def list_todos(user=None, status="all", priority="", category="", search=""):

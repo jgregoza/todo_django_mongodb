@@ -2,9 +2,12 @@ import json
 import os
 import shutil
 import tempfile
+from datetime import timedelta
 from io import BytesIO
 
+from django.conf import settings
 from django.contrib.auth.models import User
+from django.contrib.sessions.models import Session
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError, connection, transaction
@@ -12,6 +15,7 @@ from django.db.migrations.executor import MigrationExecutor
 from django.template.loader import render_to_string
 from django.test import Client, TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 from PIL import Image
 
 from . import selectors, services, views
@@ -1194,3 +1198,47 @@ class CategoryMigrationTests(TransactionTestCase):
             ),
             ["Trabajo", " trabajo ", "Personal"],
         )
+
+
+@override_settings(
+    PASSWORD_HASHERS=["django.contrib.auth.hashers.MD5PasswordHasher"],
+    SESSION_ENGINE="django.contrib.sessions.backends.db",
+)
+class SessionExpiryTests(TestCase):
+    """La sesión caduca por inactividad y no sobrevive al cierre del navegador."""
+
+    def setUp(self):
+        self.user = User.objects.create_user("carol", password="Passw0rd!123")
+
+    def test_expired_session_redirects_to_login(self):
+        self.client.force_login(self.user)
+        session_key = self.client.session.session_key
+        Session.objects.filter(session_key=session_key).update(
+            expire_date=timezone.now() - timedelta(seconds=1)
+        )
+
+        response = self.client.get(reverse("index"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.url.startswith(reverse("login")))
+
+    def test_active_request_renews_session_expiry(self):
+        self.client.force_login(self.user)
+        session_key = self.client.session.session_key
+        Session.objects.filter(session_key=session_key).update(
+            expire_date=timezone.now() + timedelta(minutes=1)
+        )
+
+        self.client.get(reverse("index"))
+
+        expire_date = Session.objects.get(session_key=session_key).expire_date
+        self.assertGreater(expire_date, timezone.now() + timedelta(hours=7))
+
+    def test_session_cookie_does_not_persist_after_browser_close(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("index"))
+
+        cookie = response.cookies[settings.SESSION_COOKIE_NAME]
+        self.assertFalse(cookie["max-age"])
+        self.assertFalse(cookie["expires"])

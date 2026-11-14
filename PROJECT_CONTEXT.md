@@ -4,7 +4,7 @@ Aplicación web personal de gestión de tareas con autenticación, prioridades, 
 
 - **Producción:** https://jzamora.pythonanywhere.com
 - **Repositorio:** https://github.com/jgregoza/todo_django_mongodb (rama `main`)
-- **Desplegado:** `e81d0b1` · Python 3.10 · Django 5.2 LTS
+- **Desplegado:** el SHA que indique `~/taskpilot-data/last_deployed_sha` en el servidor · Python 3.10 · Django 5.2 LTS
 
 ## Stack
 
@@ -25,6 +25,8 @@ Django 5.2 (MVT), SQLite vía ORM, Pillow (validación de imágenes), python-dot
 - CSRF obligatorio en formularios y en las mutaciones de la API; logout solo por POST.
 - Imágenes privadas mediante `todo_image` (propietario o staff). Validación con Pillow, límite de 5 MB y formatos JPEG/PNG/WEBP/GIF.
 - Producción: `DEBUG=False`, `SECRET_KEY` obligatoria, `ALLOWED_HOSTS` sin comodines, HTTPS, HSTS y cookies seguras.
+- Sesiones: caducan por inactividad (`SESSION_COOKIE_AGE`, 8 h por defecto, configurable por entorno) y al cerrar el navegador (`SESSION_EXPIRE_AT_BROWSER_CLOSE`). `SESSION_SAVE_EVERY_REQUEST` renueva la caducidad con cada petición, así una sesión activa no se corta. Backend `cached_db`: caché en memoria con la BD como respaldo.
+- Caché: `LocMemCache` declarada en `CACHES` con `TIMEOUT` configurable (`CACHE_TIMEOUT`, 300 s por defecto). El despliegue ejecuta `clearsessions` para purgar sesiones caducadas de la BD.
 - API: `/api/v1/todos/`, `/api/v1/todos/<id>/`, `/api/v1/todos/<id>/toggle/`, `/api/v1/todos/stats/` (compatibilidad en `/api/todos/`).
 
 ## Comandos
@@ -66,7 +68,7 @@ se orquesta con un **marcador** y una **tarea programada diaria** (09:00 UTC):
    - `git fetch` + `git merge --ff-only <sha>` (nunca retrocede ni diverge);
    - `pip install -r requirements.txt` solo si cambió `requirements.txt`;
    - respaldo SQLite con rotación (3 copias) + `PRAGMA integrity_check`;
-   - `migrate --noinput` y `collectstatic --noinput`;
+   - `migrate --noinput`, `collectstatic --noinput` y `clearsessions`;
    - recarga la web app por la API con `$API_TOKEN`;
    - escribe `last_deployed_sha` y un log.
 
@@ -78,10 +80,11 @@ Límites del plan gratuito relevantes: una tarea diaria (hasta 24 h de retraso),
 100 CPU-s/día, 512 MiB de disco (la rotación de backups es obligatoria) y la
 web app caduca mensualmente y debe renovarse.
 
-Despliegue manual inmediato: `python ~/taskpilot/deploy_task.py` en la consola
-Bash (o con `--force` para re-ejecutar). Rollback: `git revert` en `main`
-(pasa por CI y por el flujo normal); evita `git checkout`, que deja el clon en
-*detached HEAD* y bloquea el `merge --ff-only` de la tarea.
+Despliegue manual inmediato:
+`/home/jzamora/.virtualenvs/taskpilot-env/bin/python ~/taskpilot/deploy_task.py`
+en la consola Bash (o con `--force` para re-ejecutar). Rollback: `git revert` en
+`main` (pasa por CI y por el flujo normal); evita `git checkout`, que deja el
+clon en *detached HEAD* y bloquea el `merge --ff-only` de la tarea.
 
 Opciones del script: `--check`, `--dry-run`, `--sha <sha>`, `--force`.
 
@@ -110,7 +113,7 @@ Runbook:
 
 - El clon de producción es **shallow** y quedó en `main` con tracking a `origin/main`. Si `pull` se queja de la profundidad: `git fetch --unshallow`.
 - `check --deploy` solo debe mostrar `security.W005` y `security.W021` (intencionales por el subdominio compartido de PythonAnywhere).
-- Rollback: `git checkout <commit-anterior>` y Reload. No restaurar la BD como parte de un rollback de código.
+- Rollback: `git revert` en `main` y dejar que el flujo normal despliegue. No restaurar la BD como parte de un rollback de código.
 
 ## Respaldos
 
