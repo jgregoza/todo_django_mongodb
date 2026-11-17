@@ -257,6 +257,11 @@ def deploy(args: argparse.Namespace, logger: logging.Logger) -> int:
     logger.info("HEAD=%s último_desplegado=%s", head, last_deployed)
 
     if head == target and last_deployed == target and not args.force:
+        # Mantenimiento diario: aunque no haya nada que desplegar, se purgan
+        # las sesiones caducadas de la BD (SESSION_SAVE_EVERY_REQUEST renueva
+        # las activas, así que aquí solo caen las inactivas).
+        if not (args.check or args.dry_run):
+            run_manage("clearsessions", logger)
         logger.info("Producción ya está en %s; no hay nada que hacer.", target)
         return 0
 
