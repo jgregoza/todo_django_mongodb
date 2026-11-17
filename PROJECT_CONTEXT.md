@@ -13,7 +13,7 @@ Django 5.2 (MVT), SQLite vía ORM, Pillow (validación de imágenes), python-dot
 ## Mapa del repositorio
 
 - `config/`: `settings.py`, `urls.py`, `wsgi.py`, `asgi.py`.
-- `todos/`: `models.py`, `selectors.py` (lecturas), `services.py` (mutaciones), `views.py`, `forms.py`, `validators.py`, `urls.py`, `admin.py`, `tests.py`, `migrations/`.
+- `todos/`: `models.py`, `selectors.py` (lecturas, orden `-created_at,-id` para paginación estable), `services.py` (mutaciones), `views.py`, `forms.py`, `validators.py`, `urls.py`, `admin.py`, `tests.py`, `migrations/`.
 - `templates/`: interfaz web y páginas de error 400/403/404/500.
 - `pythonanywhere_wsgi.py` y `seed_data.py` (este último solo para desarrollo).
 
@@ -25,8 +25,8 @@ Django 5.2 (MVT), SQLite vía ORM, Pillow (validación de imágenes), python-dot
 - CSRF obligatorio en formularios y en las mutaciones de la API; logout solo por POST.
 - Imágenes privadas mediante `todo_image` (propietario o staff). Validación con Pillow, límite de 5 MB y formatos JPEG/PNG/WEBP/GIF.
 - Producción: `DEBUG=False`, `SECRET_KEY` obligatoria, `ALLOWED_HOSTS` sin comodines, HTTPS, HSTS y cookies seguras.
-- Sesiones: caducan por inactividad (`SESSION_COOKIE_AGE`, 8 h por defecto, configurable por entorno) y al cerrar el navegador (`SESSION_EXPIRE_AT_BROWSER_CLOSE`). `SESSION_SAVE_EVERY_REQUEST` renueva la caducidad con cada petición, así una sesión activa no se corta. Backend `cached_db`: caché en memoria con la BD como respaldo.
-- Caché: `LocMemCache` declarada en `CACHES` con `TIMEOUT` configurable (`CACHE_TIMEOUT`, 300 s por defecto). El despliegue ejecuta `clearsessions` para purgar sesiones caducadas de la BD.
+- Sesiones: caducan por inactividad (`SESSION_COOKIE_AGE`, 8 h por defecto, configurable en `.env`) y al cerrar el navegador (`SESSION_EXPIRE_AT_BROWSER_CLOSE`). `SESSION_SAVE_EVERY_REQUEST` renueva la caducidad en cada petición, así una sesión activa no se corta. Backend `cached_db`: caché en memoria con la BD como respaldo. Tests: `SessionExpiryTests` en `todos/tests.py`.
+- Caché: `LocMemCache` declarada en `CACHES` con `TIMEOUT` configurable (`CACHE_TIMEOUT`, 300 s por defecto). `clearsessions` purga las sesiones caducadas de la BD **todos los días**, haya o no despliegue (ver sección de despliegue).
 - API: `/api/v1/todos/`, `/api/v1/todos/<id>/`, `/api/v1/todos/<id>/toggle/`, `/api/v1/todos/stats/` (compatibilidad en `/api/todos/`).
 
 ## Comandos
@@ -64,13 +64,29 @@ se orquesta con un **marcador** y una **tarea programada diaria** (09:00 UTC):
    `/home/jzamora/.virtualenvs/taskpilot-env/bin/python /home/jzamora/taskpilot/deploy_task.py`
    ejecuta el despliegue:
    - lee el marcador y verifica que el SHA siga en la historia de `main`;
-   - aborta si `HEAD` ya está en ese SHA (salvo `--force`);
+   - si `HEAD` ya está en ese SHA, ejecuta `clearsessions` y termina sin
+     desplegar (salvo `--force`);
    - `git fetch` + `git merge --ff-only <sha>` (nunca retrocede ni diverge);
    - `pip install -r requirements.txt` solo si cambió `requirements.txt`;
    - respaldo SQLite con rotación (3 copias) + `PRAGMA integrity_check`;
    - `migrate --noinput`, `collectstatic --noinput` y `clearsessions`;
    - recarga la web app por la API con `$API_TOKEN`;
    - escribe `last_deployed_sha` y un log.
+
+Notas operativas:
+
+- `clearsessions` corre tanto en un despliegue real como en las pasadas diarias
+  sin cambios (pero nunca en `--check`/`--dry-run`): las sesiones caducadas se
+  purgan a diario.
+- Un cambio en `deploy_task.py` empieza a aplicarse en la **pasada siguiente** a
+  su despliegue: el proceso que hace el `merge` ya tenía cargada la versión
+  anterior del script. Por eso el 14-nov se desplegó `99f8e87` sin ejecutar
+  `clearsessions`, y `988dfcb` añadió la limpieza en días sin cambios.
+- Observado el 16-nov: CI y Deploy de `99f8e87` y `988dfcb` en verde;
+  `last_deployed_sha` = `99f8e87…` y dos pasadas sin cambios correctas.
+- Si la tarea falla con `can't open file .../deploy_task.py`, el clon se quedó
+  sin el script: bootstrap con `cd /home/jzamora/taskpilot && git pull --ff-only`
+  en la consola y se ejecuta una vez.
 
 Credenciales: secret `PA_API_TOKEN` y variable `PA_USERNAME` en GitHub. En el
 servidor no se almacena ningún secreto (`$API_TOKEN` está pre-poblado en
@@ -86,7 +102,8 @@ en la consola Bash (o con `--force` para re-ejecutar). Rollback: `git revert` en
 `main` (pasa por CI y por el flujo normal); evita `git checkout`, que deja el
 clon en *detached HEAD* y bloquea el `merge --ff-only` de la tarea.
 
-Opciones del script: `--check`, `--dry-run`, `--sha <sha>`, `--force`.
+Opciones del script: `--check`, `--dry-run`, `--sha <sha>`, `--force`. Las dos
+primeras solo informan: no escriben marcadores ni limpian sesiones.
 
 ## Despliegue en PythonAnywhere
 
@@ -112,7 +129,7 @@ Runbook:
 8. Smoke: `/`, `/login/`, 404, filtros y consola sin errores.
 
 - El clon de producción es **shallow** y quedó en `main` con tracking a `origin/main`. Si `pull` se queja de la profundidad: `git fetch --unshallow`.
-- `check --deploy` solo debe mostrar `security.W005` y `security.W021` (intencionales por el subdominio compartido de PythonAnywhere).
+- `check --deploy` solo debe mostrar `security.W005` y `security.W021` (intencionales por el subdominio compartido de PythonAnywhere). Para reproducirlo en local: `DEBUG=False` y `ALLOWED_HOSTS=jzamora.pythonanywhere.com`.
 - Rollback: `git revert` en `main` y dejar que el flujo normal despliegue. No restaurar la BD como parte de un rollback de código.
 
 ## Respaldos
@@ -138,7 +155,7 @@ Restricciones: sin dependencias / sin docs / sin tocar modelos...
 Verificación: check, makemigrations --check, test, ruff, git diff --check
 ```
 
-Reglas con varias herramientas (Antigravity u otros agentes): un solo dueño del repositorio a la vez, commit antes de cambiar de herramienta, nada de agentes en paralelo sobre la misma rama y despliegue ejecutado manualmente en la consola de PythonAnywhere.
+Reglas con varias herramientas (Antigravity u otros agentes): un solo dueño del repositorio a la vez, commit antes de cambiar de herramienta, nada de agentes en paralelo sobre la misma rama y despliegue disparado por push a `main` (CI + tarea diaria). La consola de PythonAnywhere se usa solo para el bootstrap inicial o si el flujo automático se bloquea.
 
 ## Convenciones
 
