@@ -21,6 +21,7 @@ Django 5.2 (MVT), SQLite vía ORM, Pillow (validación de imágenes), python-dot
 
 - `TodoTask`: `user` (FK obligatoria, CASCADE), `title`, `description`, `priority` (`baja|media|alta`), `category` (texto), `completed`, `due_date`, `image`, timestamps.
 - `Category`: registro privado por usuario, con `UniqueConstraint(user, normalized_name)` y nombre normalizado no vacío. Nombres normalizados con `casefold()` y espacios colapsados, máximo 50 caracteres; vacío se convierte en `General`. Siempre se resuelve contra el usuario autenticado (`services.resolve_category`).
+- `CalendarFeedToken`: token privado por usuario (`OneToOneField(user, CASCADE)`) con valor pseudoaleatorio criptográfico (`secrets.token_urlsafe(32)`). Permite la suscripción pasiva a feeds iCalendar sin exponer credenciales ni sesiones.
 - Aislamiento estricto: los recursos ajenos responden 404. La API responde 401 JSON, sin redirecciones HTML.
 - CSRF obligatorio en formularios y en las mutaciones de la API; logout solo por POST.
 - Imágenes privadas mediante `todo_image` (propietario o staff). Validación con Pillow, límite de 5 MB y formatos JPEG/PNG/WEBP/GIF.
@@ -28,6 +29,7 @@ Django 5.2 (MVT), SQLite vía ORM, Pillow (validación de imágenes), python-dot
 - Sesiones: caducan por inactividad (`SESSION_COOKIE_AGE`, 8 h por defecto, configurable en `.env`) y al cerrar el navegador (`SESSION_EXPIRE_AT_BROWSER_CLOSE`). `SESSION_SAVE_EVERY_REQUEST` renueva la caducidad en cada petición, así una sesión activa no se corta. Backend `cached_db`: caché en memoria con la BD como respaldo. Tests: `SessionExpiryTests` en `todos/tests.py`.
 - Caché: `LocMemCache` declarada en `CACHES` con `TIMEOUT` configurable (`CACHE_TIMEOUT`, 300 s por defecto). `clearsessions` purga las sesiones caducadas de la BD **todos los días**, haya o no despliegue (ver sección de despliegue).
 - API: `/api/v1/todos/`, `/api/v1/todos/<id>/`, `/api/v1/todos/<id>/toggle/`, `/api/v1/todos/stats/` (compatibilidad en `/api/todos/`).
+- Calendario (RFC 5545): `/calendar/<feed_token>.ics` (feed `text/calendar` con componentes `VEVENT` de tareas con `due_date`, compatible con Google Calendar, Apple Calendar y Outlook; responde 404 estricto ante tokens no válidos o usuarios inactivos) y `/calendar/token/regenerate/` (POST autenticado y con CSRF para rotación inmediata de token). Tests: `CalendarIntegrationTests` en `todos/tests.py`.
 
 ## Comandos
 

@@ -6,7 +6,7 @@ Separación limpia de responsabilidades (Clean Architecture / CQRS).
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db.models import Q
 
-from .models import Category, TodoTask
+from .models import CalendarFeedToken, Category, TodoTask
 
 
 def _user_todos(user):
@@ -105,3 +105,31 @@ def get_stats(user=None):
         "pending": pending,
         "percentage": percentage,
     }
+
+
+def get_calendar_token(user=None):
+    """Devuelve el token del feed iCalendar del usuario autenticado, creándolo si no existe."""
+    if not user or not user.is_authenticated:
+        return None
+    feed_token_obj, _ = CalendarFeedToken.objects.get_or_create(user=user)
+    return feed_token_obj.token
+
+
+def get_user_by_calendar_token(token):
+    """Resuelve un usuario activo mediante su token privado de feed de calendario."""
+    if not token or not isinstance(token, str):
+        return None
+    try:
+        feed_token = (
+            CalendarFeedToken.objects.select_related("user")
+            .filter(user__is_active=True)
+            .get(token=token.strip())
+        )
+        return feed_token.user
+    except (CalendarFeedToken.DoesNotExist, ValueError):
+        return None
+
+
+def list_calendar_tasks_queryset(user=None):
+    """Devuelve el queryset de tareas con fecha límite asignada para sincronización de calendario."""
+    return _user_todos(user).filter(due_date__isnull=False).order_by("due_date", "priority", "id")

@@ -1242,3 +1242,156 @@ class SessionExpiryTests(TestCase):
         cookie = response.cookies[settings.SESSION_COOKIE_NAME]
         self.assertFalse(cookie["max-age"])
         self.assertFalse(cookie["expires"])
+
+
+@override_settings(
+    PASSWORD_HASHERS=["django.contrib.auth.hashers.MD5PasswordHasher"]
+)
+class CalendarIntegrationTests(TestCase):
+    """Pruebas de la integración con calendarios (iCalendar RFC 5545, aislamiento y rotación)."""
+
+    def setUp(self):
+        self.user_a = User.objects.create_user("alice_cal", password="Passw0rd!123")
+        self.user_b = User.objects.create_user("bob_cal", password="Passw0rd!123")
+
+        self.task_a1 = TodoTask.objects.create(
+            user=self.user_a,
+            title="Tarea con fecha de Alice",
+            description="Revisar despliegue; urgente, con detalles\ny saltos de línea",
+            priority="alta",
+            category="Trabajo",
+            due_date=timezone.now().date(),
+        )
+        self.task_a2 = TodoTask.objects.create(
+            user=self.user_a,
+            title="Tarea sin fecha de Alice",
+            priority="baja",
+            due_date=None,
+        )
+        self.task_b = TodoTask.objects.create(
+            user=self.user_b,
+            title="Tarea secreta de Bob",
+            priority="media",
+            due_date=timezone.now().date(),
+        )
+
+    def test_calendar_feed_token_lifecycle(self):
+        token1 = selectors.get_calendar_token(self.user_a)
+        self.assertTrue(token1)
+        self.assertEqual(len(token1), 43)  # secrets.token_urlsafe(32) genera 43 caracteres base64
+
+        # Reutiliza el token existente en lecturas subsecuentes
+        token2 = selectors.get_calendar_token(self.user_a)
+        self.assertEqual(token1, token2)
+
+        # Regeneración emite uno nuevo e invalida el anterior
+        new_token = services.regenerate_calendar_token(self.user_a)
+        self.assertNotEqual(token1, new_token)
+        self.assertEqual(selectors.get_calendar_token(self.user_a), new_token)
+
+    def test_calendar_feed_returns_rfc5545_vcalendar(self):
+        token = selectors.get_calendar_token(self.user_a)
+        url = reverse("calendar_feed", kwargs={"feed_token": token})
+
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "text/calendar; charset=utf-8")
+        self.assertIn('inline; filename="taskpilot.ics"', response["Content-Disposition"])
+        self.assertIn("max-age=900", response["Cache-Control"])
+
+        content = response.content.decode("utf-8")
+        self.assertTrue(content.startswith("BEGIN:VCALENDAR\r\n"))
+        self.assertTrue(content.endswith("END:VCALENDAR\r\n"))
+        self.assertIn("VERSION:2.0\r\n", content)
+        self.assertIn(f"X-WR-CALNAME:TaskPilot - {self.user_a.username}\r\n", content)
+
+        # Contiene la tarea con fecha límite de Alice
+        self.assertIn("BEGIN:VEVENT\r\n", content)
+        self.assertIn("SUMMARY:Tarea con fecha de Alice\r\n", content)
+        self.assertIn(f"UID:taskpilot-{self.task_a1.id}-{self.task_a1.user_id}@taskpilot\r\n", content)
+        self.assertIn(f"DTSTART;VALUE=DATE:{self.task_a1.due_date.strftime('%Y%m%d')}\r\n", content)
+        self.assertIn("PRIORITY:1\r\n", content)
+        self.assertIn("STATUS:CONFIRMED\r\n", content)
+        self.assertIn("CATEGORIES:Trabajo\r\n", content)
+
+        # Escapado correcto de caracteres RFC 5545
+        self.assertIn(r"Revisar despliegue\; urgente\, con detalles\ny saltos de línea", content)
+
+        # No contiene tareas sin fecha límite
+        self.assertNotIn("Tarea sin fecha de Alice", content)
+
+        # Aislamiento: jamás contiene tareas de Bob
+        self.assertNotIn("Tarea secreta de Bob", content)
+
+    def test_calendar_feed_strict_404_for_invalid_or_alien_token(self):
+        # Token aleatorio/inexistente responde 404
+        url_fake = reverse("calendar_feed", kwargs={"feed_token": "token-totalmente-falso"})
+        response = self.client.get(url_fake)
+        self.assertEqual(response.status_code, 404)
+
+        # Token anterior tras regeneración debe responder 404
+        token_old = selectors.get_calendar_token(self.user_a)
+        services.regenerate_calendar_token(self.user_a)
+
+        url_old = reverse("calendar_feed", kwargs={"feed_token": token_old})
+        response = self.client.get(url_old)
+        self.assertEqual(response.status_code, 404)
+
+    def test_calendar_feed_user_inactive_responds_404(self):
+        token = selectors.get_calendar_token(self.user_a)
+        self.user_a.is_active = False
+        self.user_a.save(update_fields=["is_active"])
+
+        url = reverse("calendar_feed", kwargs={"feed_token": token})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 404)
+
+    def test_calendar_feed_disallows_post(self):
+        token = selectors.get_calendar_token(self.user_a)
+        url = reverse("calendar_feed", kwargs={"feed_token": token})
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 405)
+
+    def test_regenerate_token_view_requires_auth_and_post(self):
+        url = reverse("regenerate_calendar_token")
+
+        # Anónimo es redirigido a login
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response.url)
+
+        # Autenticado con GET devuelve 405
+        self.client.force_login(self.user_a)
+        response_get = self.client.get(url)
+        self.assertEqual(response_get.status_code, 405)
+
+        # Autenticado con POST exitoso regenera y redirige
+        old_token = selectors.get_calendar_token(self.user_a)
+        response_post = self.client.post(url)
+        self.assertEqual(response_post.status_code, 302)
+        self.assertEqual(response_post.url, reverse("index"))
+
+        new_token = selectors.get_calendar_token(self.user_a)
+        self.assertNotEqual(old_token, new_token)
+
+    def test_regenerate_token_view_ajax_returns_json(self):
+        self.client.force_login(self.user_a)
+        url = reverse("regenerate_calendar_token")
+
+        response = self.client.post(url, HTTP_X_REQUESTED_WITH="XMLHttpRequest")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data.get("success"))
+        self.assertTrue(data.get("token"))
+        self.assertTrue(data.get("feed_url").endswith(".ics"))
+        self.assertTrue(data.get("webcal_url").startswith("webcal://"))
+
+    def test_index_view_context_includes_calendar_urls(self):
+        self.client.force_login(self.user_a)
+        response = self.client.get(reverse("index"))
+        self.assertEqual(response.status_code, 200)
+
+        token = selectors.get_calendar_token(self.user_a)
+        self.assertEqual(response.context["calendar_token"], token)
+        self.assertIn(token, response.context["calendar_feed_url"])
+        self.assertIn("calendar-modal", response.content.decode("utf-8"))

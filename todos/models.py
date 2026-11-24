@@ -4,11 +4,18 @@ Utiliza el ORM relacional de Django con SQLite para máxima compatibilidad con P
 soporte nativo de subida de imágenes y cero latencia de conexión.
 """
 
+import secrets
+
 from django.contrib.auth.models import User
 from django.db import models
 from django.urls import reverse
 
 MAX_CATEGORY_LENGTH = 50
+
+
+def generate_feed_token():
+    """Genera un token seguro pseudoaleatorio para URLs privadas de iCalendar."""
+    return secrets.token_urlsafe(32)
 
 
 def normalize_category_name(value):
@@ -135,3 +142,35 @@ class TodoTask(models.Model):
             "created_at": self.created_at.strftime("%Y-%m-%d %H:%M") if self.created_at else None,
             "updated_at": self.updated_at.strftime("%Y-%m-%d %H:%M") if self.updated_at else None,
         }
+
+
+class CalendarFeedToken(models.Model):
+    """Token criptográfico privado para suscripción a feed iCalendar (RFC 5545)."""
+
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name="calendar_feed_token",
+        verbose_name="Usuario",
+    )
+    token = models.CharField(
+        max_length=64,
+        unique=True,
+        default=generate_feed_token,
+        verbose_name="Token de suscripción",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de creación")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="Última regeneración")
+
+    class Meta:
+        verbose_name = "Token de Calendario"
+        verbose_name_plural = "Tokens de Calendario"
+
+    def __str__(self):
+        return f"CalendarFeedToken({self.user.username})"
+
+    def regenerate(self):
+        """Genera y guarda un nuevo token invalidando el anterior."""
+        self.token = generate_feed_token()
+        self.save(update_fields=["token", "updated_at"])
+        return self.token

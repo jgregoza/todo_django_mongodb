@@ -11,6 +11,10 @@ urlpatterns = [
     path("todos/<int:todo_id>/delete/", views.delete_todo_view, name="delete_todo"),
     path("todos/<int:todo_id>/image/", views.todo_image, name="todo_image"),
 
+    # Sincronización e Integración de Calendario (RFC 5545)
+    path("calendar/<str:feed_token>.ics", views.calendar_feed_view, name="calendar_feed"),
+    path("calendar/token/regenerate/", views.regenerate_calendar_feed_view, name="regenerate_calendar_token"),
+
     # Autenticación
     path("login/", views.login_view, name="login"),
     path("register/", views.register_view, name="register"),

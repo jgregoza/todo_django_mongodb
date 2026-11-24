@@ -13,8 +13,9 @@ from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.core.exceptions import ValidationError
-from django.http import FileResponse, Http404, JsonResponse
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.views.decorators.http import require_http_methods, require_POST
 
 from . import selectors, services
@@ -81,12 +82,19 @@ def index_view(request):
     todos = [t.to_dict() for t in page_obj]
     stats = selectors.get_stats(user=request.user)
     categories = selectors.get_categories(user=request.user)
+    calendar_token = selectors.get_calendar_token(user=request.user)
+    calendar_feed_path = reverse("calendar_feed", kwargs={"feed_token": calendar_token})
+    calendar_feed_url = request.build_absolute_uri(calendar_feed_path)
+    calendar_webcal_url = calendar_feed_url.replace("https://", "webcal://").replace("http://", "webcal://")
 
     context = {
         "todos": todos,
         "page_obj": page_obj,
         "stats": stats,
         "categories": categories,
+        "calendar_token": calendar_token,
+        "calendar_feed_url": calendar_feed_url,
+        "calendar_webcal_url": calendar_webcal_url,
         "current_status": status,
         "current_priority": priority,
         "current_category": category,
@@ -441,3 +449,56 @@ def api_stats(request):
     """API con estadísticas generales."""
     stats = selectors.get_stats(user=request.user)
     return JsonResponse(stats)
+
+
+@require_http_methods(["GET", "HEAD"])
+def calendar_feed_view(request, feed_token):
+    """
+    Entrega el feed de suscripción iCalendar (RFC 5545) para las tareas del usuario.
+
+    Accesible de forma pasiva por clientes de calendario (Google Calendar, Apple Calendar, Outlook)
+    a través del token criptográfico único del usuario. Si el token no existe o el usuario está inactivo,
+    devuelve 404 estricto para proteger la privacidad.
+    """
+    user = selectors.get_user_by_calendar_token(feed_token)
+    if not user:
+        logger.warning(
+            "Intento de acceso a feed de calendario con token inexistente o usuario inactivo"
+        )
+        raise Http404("Calendario no encontrado")
+
+    tasks = selectors.list_calendar_tasks_queryset(user)
+    ical_content = services.generate_ical_feed(user, tasks)
+
+    response = HttpResponse(ical_content, content_type="text/calendar; charset=utf-8")
+    response["Content-Disposition"] = 'inline; filename="taskpilot.ics"'
+    response["Cache-Control"] = "private, max-age=900"
+    return response
+
+
+@login_required
+@require_POST
+def regenerate_calendar_feed_view(request):
+    """
+    Regenera el token privado de suscripción a calendario del usuario autenticado.
+
+    Invalida de inmediato cualquier URL de feed previamente compartida o configurada.
+    """
+    new_token = services.regenerate_calendar_token(request.user)
+    feed_path = reverse("calendar_feed", kwargs={"feed_token": new_token})
+    feed_url = request.build_absolute_uri(feed_path)
+    webcal_url = feed_url.replace("https://", "webcal://").replace("http://", "webcal://")
+
+    if (
+        request.headers.get("x-requested-with") == "XMLHttpRequest"
+        or request.headers.get("accept") == "application/json"
+    ):
+        return JsonResponse({
+            "success": True,
+            "token": new_token,
+            "feed_url": feed_url,
+            "webcal_url": webcal_url,
+        })
+
+    messages.success(request, "Enlace de suscripción a calendario regenerado exitosamente.")
+    return redirect("index")

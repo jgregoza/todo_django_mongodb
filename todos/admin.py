@@ -5,7 +5,7 @@ from django.db import transaction
 from django.urls import reverse
 from django.utils.html import format_html
 
-from .models import TodoTask
+from .models import CalendarFeedToken, TodoTask
 
 logger = logging.getLogger('todos')
 
@@ -78,3 +78,10 @@ class TodoTaskAdmin(admin.ModelAdmin):
                 transaction.on_commit(
                     lambda s=storage, n=name: _delete_image_if_unused(s, n)
                 )
+
+
+@admin.register(CalendarFeedToken)
+class CalendarFeedTokenAdmin(admin.ModelAdmin):
+    list_display = ("user", "token", "created_at", "updated_at")
+    search_fields = ("user__username", "token")
+    readonly_fields = ("created_at", "updated_at")

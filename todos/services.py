@@ -3,16 +3,26 @@ Capa de servicios (mutaciones de dominio y transacciones) para TaskPilot.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from django.db import IntegrityError, transaction
+from django.utils import timezone
 
-from .models import Category, TodoTask, clean_category_name, normalize_category_name
+from .models import (
+    CalendarFeedToken,
+    Category,
+    TodoTask,
+    clean_category_name,
+    normalize_category_name,
+)
 from .selectors import (
     _user_todos,
+    get_calendar_token,
     get_categories,
     get_stats,
     get_todo,
+    get_user_by_calendar_token,
+    list_calendar_tasks_queryset,
     list_todos,
     list_todos_queryset,
     paginate_queryset,
@@ -29,11 +39,16 @@ __all__ = [
     "get_todo",
     "get_categories",
     "get_stats",
+    "get_calendar_token",
+    "get_user_by_calendar_token",
+    "list_calendar_tasks_queryset",
     "resolve_category",
     "create_todo",
     "update_todo",
     "toggle_todo",
     "delete_todo",
+    "regenerate_calendar_token",
+    "generate_ical_feed",
 ]
 
 
@@ -284,3 +299,91 @@ def delete_todo(todo_id, user=None):
         getattr(user, "username", "anónimo"),
     )
     return True
+
+
+def _escape_ical_text(value):
+    """Escapa caracteres reservados en campos de texto RFC 5545."""
+    if not value:
+        return ""
+    text = str(value)
+    text = text.replace("\\", "\\\\")
+    text = text.replace(";", "\\;")
+    text = text.replace(",", "\\,")
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    return text.replace("\n", "\\n")
+
+
+def regenerate_calendar_token(user):
+    """Regenera de forma segura el token de suscripción de calendario de un usuario."""
+    if not user or not user.is_authenticated:
+        raise ValueError("Se requiere un usuario autenticado para regenerar el token.")
+
+    token_obj, _ = CalendarFeedToken.objects.get_or_create(user=user)
+    new_token = token_obj.regenerate()
+    logger.info("Token de calendario regenerado para el usuario %s", user.username)
+    return new_token
+
+
+def generate_ical_feed(user, tasks=None, prod_id="-//TaskPilot//ES"):
+    """
+    Genera un feed iCalendar conforme a RFC 5545 con las tareas del usuario.
+
+    Cada tarea con fecha límite se exporta como un componente VEVENT de día completo,
+    lo que garantiza compatibilidad universal con Google Calendar, Apple Calendar y Outlook.
+    """
+    if tasks is None:
+        tasks = list_calendar_tasks_queryset(user)
+
+    now_utc = timezone.now().strftime("%Y%m%dT%H%M%SZ")
+    lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        f"PRODID:{prod_id}",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+        f"X-WR-CALNAME:TaskPilot - {_escape_ical_text(user.username)}",
+        "X-WR-TIMEZONE:UTC",
+    ]
+
+    priority_map = {
+        "alta": 1,
+        "media": 5,
+        "baja": 9,
+    }
+
+    for task in tasks:
+        if not task.due_date:
+            continue
+
+        dtstart = task.due_date.strftime("%Y%m%d")
+        dtend = (task.due_date + timedelta(days=1)).strftime("%Y%m%d")
+        summary_prefix = "[✓] " if task.completed else ""
+        summary = f"{summary_prefix}{task.title}"
+
+        status = "COMPLETED" if task.completed else "CONFIRMED"
+        priority_val = priority_map.get(task.priority, 5)
+
+        description_parts = []
+        if task.description:
+            description_parts.append(task.description)
+        description_parts.append(f"Prioridad: {task.get_priority_display() or task.priority}")
+        description_parts.append(f"Categoría: {task.category or 'General'}")
+        description_parts.append(f"Estado: {'Completada' if task.completed else 'Pendiente'}")
+        description_text = " | ".join(description_parts)
+
+        lines.extend([
+            "BEGIN:VEVENT",
+            f"UID:taskpilot-{task.id}-{task.user_id}@taskpilot",
+            f"DTSTAMP:{now_utc}",
+            f"DTSTART;VALUE=DATE:{dtstart}",
+            f"DTEND;VALUE=DATE:{dtend}",
+            f"SUMMARY:{_escape_ical_text(summary)}",
+            f"DESCRIPTION:{_escape_ical_text(description_text)}",
+            f"CATEGORIES:{_escape_ical_text(task.category or 'General')}",
+            f"STATUS:{status}",
+            f"PRIORITY:{priority_val}",
+            "END:VEVENT",
+        ])
+
+    lines.append("END:VCALENDAR")
+    return "\r\n".join(lines) + "\r\n"
