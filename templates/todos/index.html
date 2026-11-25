@@ -1,142 +1,69 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TaskPilot | Django & PythonAnywhere</title>
+  <title>TaskPilot | Gestión de tareas</title>
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
+  {% include "partials/theme_init.html" %}
   <!-- Lucide Icons CDN -->
   <script src="https://unpkg.com/lucide@latest"></script>
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <style>
-    body {
-      font-family: 'Plus Jakarta Sans', sans-serif;
-    }
-
-    /* Actualización dinámica del listado de tareas */
-    #task-list {
-      transition: opacity 0.18s ease;
-    }
-    #task-list.is-loading {
-      opacity: 0.45;
-      pointer-events: none;
-    }
-    .task-list-enter {
-      animation: task-list-in 0.22s ease-out both;
-    }
-    @keyframes task-list-in {
-      from { opacity: 0; transform: translateY(4px); }
-      to { opacity: 1; transform: none; }
-    }
-
-    /* Transiciones discretas de controles */
-    button,
-    a,
-    select,
-    input,
-    textarea {
-      transition: background-color 0.15s ease, border-color 0.15s ease,
-        color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
-    }
-    button:not(:disabled):active {
-      transform: scale(0.98);
-    }
-
-    /* Aparición y cierre de modales */
-    .modal-enter {
-      animation: modal-fade-in 0.18s ease-out both;
-    }
-    .modal-enter > div {
-      animation: modal-pop-in 0.18s ease-out both;
-    }
-    .modal-leave {
-      animation: modal-fade-out 0.14s ease-in both;
-    }
-    .modal-leave > div {
-      animation: modal-pop-out 0.14s ease-in both;
-    }
-    @keyframes modal-fade-in {
-      from { opacity: 0; }
-      to { opacity: 1; }
-    }
-    @keyframes modal-fade-out {
-      from { opacity: 1; }
-      to { opacity: 0; }
-    }
-    @keyframes modal-pop-in {
-      from { opacity: 0; transform: translateY(8px) scale(0.98); }
-      to { opacity: 1; transform: none; }
-    }
-    @keyframes modal-pop-out {
-      from { opacity: 1; transform: none; }
-      to { opacity: 0; transform: translateY(8px) scale(0.98); }
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      *,
-      *::before,
-      *::after {
-        animation-duration: 0.01ms !important;
-        animation-iteration-count: 1 !important;
-        transition-duration: 0.01ms !important;
-        scroll-behavior: auto !important;
-      }
-      button:not(:disabled):active {
-        transform: none;
-      }
-    }
-  </style>
+  <link rel="stylesheet" href="{% static 'todos/app.css' %}?v={{ APP_VERSION }}">
+  <script src="{% static 'todos/app.js' %}" defer></script>
 </head>
-<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col antialiased">
+<body class="bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200 min-h-screen flex flex-col antialiased">
 
   <!-- Encabezado / Navbar -->
-  <header class="bg-white/80 backdrop-blur-md sticky top-0 z-30 border-b border-slate-200">
+  <header class="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md sticky top-0 z-30 border-b border-slate-200 dark:border-slate-800">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
       <div class="flex items-center gap-3">
         <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-white shadow-md shadow-emerald-500/20">
           <i data-lucide="check-square" class="w-5 h-5"></i>
         </div>
         <div>
-          <h1 class="text-lg font-bold text-slate-900 leading-tight">TaskPilot</h1>
-          <p class="text-xs text-slate-500 font-medium">Django 5 • PythonAnywhere Ready</p>
+          <h1 class="text-lg font-bold text-slate-900 dark:text-white leading-tight">TaskPilot</h1>
+          <p class="text-xs text-slate-500 dark:text-slate-400 font-medium">v{{ APP_VERSION }}</p>
         </div>
       </div>
 
       <!-- Estado & Botón Nueva Tarea & Auth -->
-      <div class="flex items-center gap-3">
+      <div class="flex items-center gap-2 sm:gap-3">
+        {% include "partials/theme_toggle.html" %}
         {% if request.user.is_authenticated %}
-        <button onclick="openModal('calendar-modal')" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition" title="Sincronizar Calendario">
-          <i data-lucide="calendar" class="w-3.5 h-3.5 text-emerald-600"></i>
+        <button onclick="openModal('calendar-modal')" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold transition" title="Sincronizar Calendario">
+          <i data-lucide="calendar" class="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400"></i>
           <span class="hidden sm:inline">Calendario</span>
         </button>
-        <div class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 text-xs font-semibold text-slate-700">
+        <div class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200">
           <div class="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px]">
             {{ request.user.username|first|upper }}
           </div>
-          <span class="max-w-[100px] truncate">{{ request.user.username }}</span>
+          <span class="hidden sm:inline max-w-[100px] truncate">{{ request.user.username }}</span>
           <form method="POST" action="{% url 'logout' %}" class="ml-1">
             {% csrf_token %}
-            <button type="submit" class="text-slate-400 hover:text-rose-600 transition" title="Cerrar sesión">
+            <button type="submit" class="text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 transition" title="Cerrar sesión">
               <i data-lucide="log-out" class="w-3.5 h-3.5"></i>
             </button>
           </form>
         </div>
         {% else %}
         <div class="flex items-center gap-1.5">
-          <a href="{% url 'login' %}" class="px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-slate-900 rounded-xl hover:bg-slate-100 transition">
+          <a href="{% url 'login' %}" class="px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition">
             Entrar
           </a>
-          <a href="{% url 'register' %}" class="px-3 py-1.5 text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition">
+          <a href="{% url 'register' %}" class="px-3 py-1.5 text-xs font-semibold bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 border border-emerald-200 dark:border-emerald-500/30 rounded-xl transition">
             Registrarse
           </a>
         </div>
         {% endif %}
 
-        <button onclick="openModal('new-task-modal')" class="hidden sm:inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl shadow-md shadow-emerald-600/25 transition">
+        <button onclick="openModal('new-task-modal')" class="hidden sm:inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl shadow-md shadow-emerald-600/25 dark:shadow-emerald-950/40 transition">
           <i data-lucide="plus" class="w-4 h-4"></i>
           Nueva Tarea
         </button>
@@ -144,82 +71,72 @@
     </div>
   </header>
 
-  <!-- Mensajes de Notificación -->
-  {% if messages %}
-  <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 space-y-2">
-    {% for message in messages %}
-    <div class="p-3.5 text-xs rounded-2xl flex items-center gap-2 shadow-sm {% if message.tags == 'error' %}bg-rose-50 text-rose-800 border border-rose-200{% elif message.tags == 'success' %}bg-emerald-50 text-emerald-800 border border-emerald-200{% else %}bg-sky-50 text-sky-800 border border-sky-200{% endif %}">
-      <i data-lucide="info" class="w-4 h-4 shrink-0"></i>
-      <span>{{ message }}</span>
-    </div>
-    {% endfor %}
-  </div>
-  {% endif %}
+  {% include "partials/app_messages.html" with messages_vertical="top-20" %}
 
   <!-- Contenedor Principal -->
   <main class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full">
 
     <!-- Tarjetas de Métricas -->
     <section class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-      <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
+      <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm">
         <div class="flex items-center justify-between mb-2">
-          <span class="text-xs font-semibold uppercase tracking-wider text-slate-500">Total Tareas</span>
-          <div class="p-2 rounded-lg bg-slate-100 text-slate-600">
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Total Tareas</span>
+          <div class="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
             <i data-lucide="layers" class="w-4 h-4"></i>
           </div>
         </div>
-        <p class="text-2xl font-bold text-slate-900">{{ stats.total }}</p>
+        <p class="text-2xl font-bold text-slate-900 dark:text-white">{{ stats.total }}</p>
       </div>
 
-      <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
+      <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm">
         <div class="flex items-center justify-between mb-2">
-          <span class="text-xs font-semibold uppercase tracking-wider text-amber-600">Pendientes</span>
-          <div class="p-2 rounded-lg bg-amber-50 text-amber-600">
+          <span class="text-xs font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">Pendientes</span>
+          <div class="p-2 rounded-lg bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400">
             <i data-lucide="clock" class="w-4 h-4"></i>
           </div>
         </div>
-        <p class="text-2xl font-bold text-amber-600">{{ stats.pending }}</p>
+        <p class="text-2xl font-bold text-amber-600 dark:text-amber-400">{{ stats.pending }}</p>
       </div>
 
-      <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
+      <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm">
         <div class="flex items-center justify-between mb-2">
-          <span class="text-xs font-semibold uppercase tracking-wider text-emerald-600">Completadas</span>
-          <div class="p-2 rounded-lg bg-emerald-50 text-emerald-600">
+          <span class="text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Completadas</span>
+          <div class="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
             <i data-lucide="check-circle-2" class="w-4 h-4"></i>
           </div>
         </div>
-        <p class="text-2xl font-bold text-emerald-600">{{ stats.completed }}</p>
+        <p class="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{{ stats.completed }}</p>
       </div>
 
-      <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
+      <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm">
         <div class="flex items-center justify-between mb-2">
-          <span class="text-xs font-semibold uppercase tracking-wider text-teal-600">Progreso</span>
-          <span class="text-xs font-bold text-teal-600">{{ stats.percentage }}%</span>
+          <span class="text-xs font-semibold uppercase tracking-wider text-teal-600 dark:text-teal-400">Progreso</span>
+          <span class="text-xs font-bold text-teal-600 dark:text-teal-400">{{ stats.percentage }}%</span>
         </div>
-        <div class="w-full bg-slate-100 rounded-full h-3 mt-3 overflow-hidden">
-          <div class="bg-teal-500 h-3 rounded-full transition-all duration-500" style="width: {{ stats.percentage }}%"></div>
+        <div class="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-3 mt-3 overflow-hidden">
+          <div class="bg-teal-500 h-3 rounded-full transition-[width] duration-700 ease-out" style="width: {{ stats.percentage }}%"></div>
         </div>
       </div>
     </section>
 
     <!-- Barra de Filtros y Búsqueda -->
-    <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm mb-6 flex flex-col md:flex-row items-center justify-between gap-4">
+    <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm mb-6 flex flex-col md:flex-row items-center justify-between gap-4">
 
       <!-- Pestañas de Estado -->
-      <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-xl w-full md:w-auto">
+      <div class="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl w-full md:w-auto">
         <a href="?status=all{% if current_priority %}&priority={{ current_priority }}{% endif %}{% if current_category %}&category={{ current_category }}{% endif %}{% if search_query %}&q={{ search_query }}{% endif %}"
            data-filter-status="all"
-           class="px-3.5 py-1.5 text-xs font-semibold rounded-lg transition text-center flex-1 md:flex-none {% if current_status == 'all' %}bg-white text-slate-900 shadow-sm{% else %}text-slate-600 hover:text-slate-900{% endif %}">
+           class="px-3.5 py-1.5 text-xs font-semibold rounded-lg transition text-center flex-1 md:flex-none {% if current_status == 'all' %}bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm{% else %}text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white{% endif %}">
           Todas
         </a>
         <a href="?status=pending{% if current_priority %}&priority={{ current_priority }}{% endif %}{% if current_category %}&category={{ current_category }}{% endif %}{% if search_query %}&q={{ search_query }}{% endif %}"
            data-filter-status="pending"
-           class="px-3.5 py-1.5 text-xs font-semibold rounded-lg transition text-center flex-1 md:flex-none {% if current_status == 'pending' %}bg-white text-slate-900 shadow-sm{% else %}text-slate-600 hover:text-slate-900{% endif %}">
+           class="px-3.5 py-1.5 text-xs font-semibold rounded-lg transition text-center flex-1 md:flex-none {% if current_status == 'pending' %}bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm{% else %}text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white{% endif %}">
           Pendientes
         </a>
         <a href="?status=completed{% if current_priority %}&priority={{ current_priority }}{% endif %}{% if current_category %}&category={{ current_category }}{% endif %}{% if search_query %}&q={{ search_query }}{% endif %}"
            data-filter-status="completed"
-           class="px-3.5 py-1.5 text-xs font-semibold rounded-lg transition text-center flex-1 md:flex-none {% if current_status == 'completed' %}bg-white text-slate-900 shadow-sm{% else %}text-slate-600 hover:text-slate-900{% endif %}">
+           class="px-3.5 py-1.5 text-xs font-semibold rounded-lg transition text-center flex-1 md:flex-none {% if current_status == 'completed' %}bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm{% else %}text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white{% endif %}">
           Completadas
         </a>
       </div>
@@ -228,14 +145,14 @@
       <form id="filter-form" method="GET" class="flex flex-wrap sm:flex-nowrap items-center gap-3 w-full md:w-auto">
         <input type="hidden" name="status" value="{{ current_status }}">
 
-        <select name="priority" class="text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
+        <select name="priority" class="text-xs font-medium bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
           <option value="" {% if not current_priority %}selected{% endif %}>Prioridad: Todas</option>
           <option value="alta" {% if current_priority == 'alta' %}selected{% endif %}>🔴 Alta</option>
           <option value="media" {% if current_priority == 'media' %}selected{% endif %}>🟡 Media</option>
           <option value="baja" {% if current_priority == 'baja' %}selected{% endif %}>🔵 Baja</option>
         </select>
 
-        <select name="category" class="text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
+        <select name="category" class="text-xs font-medium bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
           <option value="" {% if not current_category %}selected{% endif %}>Categoría: Todas</option>
           {% for cat in categories %}
             <option value="{{ cat }}" {% if current_category == cat %}selected{% endif %}>{{ cat }}</option>
@@ -243,12 +160,12 @@
         </select>
 
         <div class="relative flex-1 sm:w-48">
-          <i data-lucide="search" class="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
-          <input type="text" name="q" value="{{ search_query }}" placeholder="Buscar tarea..." class="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
+          <i data-lucide="search" class="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500"></i>
+          <input type="text" name="q" value="{{ search_query }}" placeholder="Buscar tarea..." class="w-full text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-3 py-2 text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
         </div>
 
         <noscript>
-          <button type="submit" class="text-xs font-semibold px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-slate-700">
+          <button type="submit" class="text-xs font-semibold px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-700 dark:text-slate-200">
             Aplicar
           </button>
         </noscript>
@@ -277,14 +194,14 @@
   </datalist>
 
   <!-- Modal: Nueva Tarea (con soporte de imagen) -->
-  <div id="new-task-modal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-    <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 transform transition-all">
-      <div class="flex items-center justify-between pb-4 border-b border-slate-100 mb-5">
-        <h2 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+  <div id="new-task-modal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-slate-900/40 dark:bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 dark:border-slate-800 dark:shadow-slate-950/60">
+      <div class="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 mb-5">
+        <h2 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
           <i data-lucide="plus-circle" class="w-5 h-5 text-emerald-600"></i>
           Nueva Tarea
         </h2>
-        <button onclick="closeModal('new-task-modal')" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+        <button onclick="closeModal('new-task-modal')" class="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg">
           <i data-lucide="x" class="w-5 h-5"></i>
         </button>
       </div>
@@ -292,43 +209,43 @@
       <form method="POST" action="{% url 'create_todo' %}" enctype="multipart/form-data" class="space-y-4">
         {% csrf_token %}
         <div>
-          <label class="block text-xs font-semibold text-slate-700 mb-1.5">Título <span class="text-rose-500">*</span></label>
-          <input type="text" name="title" required placeholder="Ej: Subir despliegue a PythonAnywhere..." class="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500">
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Título <span class="text-rose-500">*</span></label>
+          <input type="text" name="title" required placeholder="Ej: Subir despliegue a PythonAnywhere..." class="w-full text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500">
         </div>
 
         <div>
-          <label class="block text-xs font-semibold text-slate-700 mb-1.5">Descripción (Opcional)</label>
-          <textarea name="description" rows="2" placeholder="Detalles o notas..." class="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"></textarea>
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Descripción (Opcional)</label>
+          <textarea name="description" rows="2" placeholder="Detalles o notas..." class="w-full text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"></textarea>
         </div>
 
         <div class="grid grid-cols-2 gap-4">
           <div>
-            <label class="block text-xs font-semibold text-slate-700 mb-1.5">Prioridad</label>
-            <select name="priority" class="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
+            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Prioridad</label>
+            <select name="priority" class="w-full text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
               <option value="alta">🔴 Alta</option>
               <option value="media" selected>🟡 Media</option>
               <option value="baja">🔵 Baja</option>
             </select>
           </div>
           <div>
-            <label class="block text-xs font-semibold text-slate-700 mb-1.5">Categoría</label>
-            <input type="text" name="category" value="General" list="category-options" autocomplete="off" maxlength="50" placeholder="Elige o escribe una nueva" class="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
+            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Categoría</label>
+            <input type="text" name="category" value="General" list="category-options" autocomplete="off" maxlength="50" placeholder="Elige o escribe una nueva" class="w-full text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
           </div>
         </div>
 
         <div class="grid grid-cols-2 gap-4">
           <div>
-            <label class="block text-xs font-semibold text-slate-700 mb-1.5">Fecha Límite</label>
-            <input type="date" name="due_date" class="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
+            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Fecha Límite</label>
+            <input type="date" name="due_date" class="w-full text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
           </div>
           <div>
-            <label class="block text-xs font-semibold text-slate-700 mb-1.5">Adjuntar Imagen (Opcional)</label>
-            <input type="file" name="image" accept="image/*" class="w-full text-xs text-slate-500 file:mr-2 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 cursor-pointer">
+            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Adjuntar Imagen (Opcional)</label>
+            <input type="file" name="image" accept="image/*" class="w-full text-xs text-slate-500 dark:text-slate-400 file:mr-2 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 dark:file:bg-emerald-500/10 file:text-emerald-700 dark:file:text-emerald-300 hover:file:bg-emerald-100 dark:hover:file:bg-emerald-500/20 cursor-pointer">
           </div>
         </div>
 
-        <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
-          <button type="button" onclick="closeModal('new-task-modal')" class="px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition">
+        <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+          <button type="button" onclick="closeModal('new-task-modal')" class="px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 rounded-xl transition">
             Cancelar
           </button>
           <button type="submit" class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-md shadow-emerald-600/20 transition">
@@ -340,14 +257,14 @@
   </div>
 
   <!-- Modal: Editar Tarea -->
-  <div id="edit-task-modal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-    <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 transform transition-all">
-      <div class="flex items-center justify-between pb-4 border-b border-slate-100 mb-5">
-        <h2 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+  <div id="edit-task-modal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-slate-900/40 dark:bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 dark:border-slate-800 dark:shadow-slate-950/60">
+      <div class="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 mb-5">
+        <h2 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
           <i data-lucide="edit" class="w-5 h-5 text-emerald-600"></i>
           Editar Tarea
         </h2>
-        <button onclick="closeModal('edit-task-modal')" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+        <button onclick="closeModal('edit-task-modal')" class="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg">
           <i data-lucide="x" class="w-5 h-5"></i>
         </button>
       </div>
@@ -355,46 +272,46 @@
       <form id="edit-task-form" method="POST" action="" enctype="multipart/form-data" class="space-y-4">
         {% csrf_token %}
         <div>
-          <label class="block text-xs font-semibold text-slate-700 mb-1.5">Título <span class="text-rose-500">*</span></label>
-          <input type="text" id="edit-title" name="title" required class="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500">
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Título <span class="text-rose-500">*</span></label>
+          <input type="text" id="edit-title" name="title" required class="w-full text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500">
         </div>
 
         <div>
-          <label class="block text-xs font-semibold text-slate-700 mb-1.5">Descripción</label>
-          <textarea id="edit-description" name="description" rows="2" class="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"></textarea>
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Descripción</label>
+          <textarea id="edit-description" name="description" rows="2" class="w-full text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"></textarea>
         </div>
 
         <div class="grid grid-cols-2 gap-4">
           <div>
-            <label class="block text-xs font-semibold text-slate-700 mb-1.5">Prioridad</label>
-            <select id="edit-priority" name="priority" class="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
+            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Prioridad</label>
+            <select id="edit-priority" name="priority" class="w-full text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
               <option value="alta">🔴 Alta</option>
               <option value="media">🟡 Media</option>
               <option value="baja">🔵 Baja</option>
             </select>
           </div>
           <div>
-            <label class="block text-xs font-semibold text-slate-700 mb-1.5">Categoría</label>
-            <input type="text" id="edit-category" name="category" list="category-options" autocomplete="off" maxlength="50" placeholder="Elige o escribe una nueva" class="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
+            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Categoría</label>
+            <input type="text" id="edit-category" name="category" list="category-options" autocomplete="off" maxlength="50" placeholder="Elige o escribe una nueva" class="w-full text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
           </div>
         </div>
 
         <div class="grid grid-cols-2 gap-4">
           <div>
-            <label class="block text-xs font-semibold text-slate-700 mb-1.5">Fecha Límite</label>
-            <input type="date" id="edit-due-date" name="due_date" class="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
+            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Fecha Límite</label>
+            <input type="date" id="edit-due-date" name="due_date" class="w-full text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
           </div>
           <div>
-            <label class="block text-xs font-semibold text-slate-700 mb-1.5">Cambiar Imagen</label>
-            <input type="file" name="image" accept="image/*" class="w-full text-xs text-slate-500 file:mr-2 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 cursor-pointer">
+            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Cambiar Imagen</label>
+            <input type="file" name="image" accept="image/*" class="w-full text-xs text-slate-500 dark:text-slate-400 file:mr-2 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 dark:file:bg-emerald-500/10 file:text-emerald-700 dark:file:text-emerald-300 hover:file:bg-emerald-100 dark:hover:file:bg-emerald-500/20 cursor-pointer">
           </div>
         </div>
 
         <!-- Preview y opción de borrar imagen -->
-        <div id="edit-image-preview-container" class="hidden items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
-          <img id="edit-image-preview" src="" alt="Vista previa" class="w-12 h-12 object-cover rounded-lg border border-slate-200">
+        <div id="edit-image-preview-container" class="hidden items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
+          <img id="edit-image-preview" src="" alt="Vista previa" class="w-12 h-12 object-cover rounded-lg border border-slate-200 dark:border-slate-700">
           <div class="flex-1">
-            <p class="text-xs font-medium text-slate-700">Imagen actual adjunta</p>
+            <p class="text-xs font-medium text-slate-700 dark:text-slate-300">Imagen actual adjunta</p>
             <label class="flex items-center gap-1.5 mt-1 text-xs text-rose-600 font-semibold cursor-pointer">
               <input type="checkbox" name="clear_image" class="rounded text-rose-600">
               Eliminar esta imagen
@@ -402,8 +319,8 @@
           </div>
         </div>
 
-        <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
-          <button type="button" onclick="closeModal('edit-task-modal')" class="px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition">
+        <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+          <button type="button" onclick="closeModal('edit-task-modal')" class="px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 rounded-xl transition">
             Cancelar
           </button>
           <button type="submit" class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-md shadow-emerald-600/20 transition">
@@ -423,36 +340,36 @@
   </div>
 
   <!-- Modal: Sincronizar Calendario -->
-  <div id="calendar-modal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-    <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 transform transition-all">
-      <div class="flex items-center justify-between pb-4 border-b border-slate-100 mb-5">
-        <h2 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+  <div id="calendar-modal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-slate-900/40 dark:bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 dark:border-slate-800 dark:shadow-slate-950/60">
+      <div class="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 mb-5">
+        <h2 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
           <i data-lucide="calendar" class="w-5 h-5 text-emerald-600"></i>
           Sincronizar Calendario (iCal)
         </h2>
-        <button onclick="closeModal('calendar-modal')" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+        <button onclick="closeModal('calendar-modal')" class="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg">
           <i data-lucide="x" class="w-5 h-5"></i>
         </button>
       </div>
 
       <div class="space-y-4">
-        <p class="text-xs text-slate-600 leading-relaxed">
+        <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
           Sincroniza tus tareas pendientes con fecha límite en <strong>Google Calendar, Apple Calendar, Outlook</strong> o cualquier cliente compatible con feeds iCalendar (RFC 5545).
         </p>
 
         <div>
-          <label class="block text-xs font-semibold text-slate-700 mb-1.5">Enlace Privado de Suscripción</label>
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Enlace Privado de Suscripción</label>
           <div class="flex gap-2">
-            <input id="calendar-feed-input" type="text" readonly value="{{ calendar_feed_url }}" class="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-600 select-all font-mono">
-            <button type="button" onclick="copyCalendarUrl()" id="copy-calendar-btn" class="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition shrink-0">
+            <input id="calendar-feed-input" type="text" readonly value="{{ calendar_feed_url }}" class="w-full text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-600 dark:text-slate-300 select-all font-mono">
+            <button type="button" onclick="copyCalendarUrl()" id="copy-calendar-btn" class="px-3.5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition shrink-0">
               <i data-lucide="copy" class="w-3.5 h-3.5"></i>
               <span>Copiar</span>
             </button>
           </div>
         </div>
 
-        <div class="p-3 bg-amber-50/80 border border-amber-200/60 rounded-xl text-xs text-amber-900 flex items-start gap-2.5">
-          <i data-lucide="shield-alert" class="w-4 h-4 text-amber-600 shrink-0 mt-0.5"></i>
+        <div class="p-3 bg-amber-50/80 dark:bg-amber-500/10 border border-amber-200/60 dark:border-amber-500/25 rounded-xl text-xs text-amber-900 dark:text-amber-200 flex items-start gap-2.5">
+          <i data-lucide="shield-alert" class="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5"></i>
           <span>Este enlace contiene tu token privado y no debe compartirse. Si consideras que se ha filtrado, regenéralo inmediatamente.</span>
         </div>
 
@@ -465,7 +382,7 @@
           {% endif %}
           <form method="POST" action="{% url 'regenerate_calendar_token' %}" onsubmit="return confirm('¿Regenerar token? Las suscripciones activas dejarán de actualizarse hasta configurar el nuevo enlace.');" class="sm:shrink-0">
             {% csrf_token %}
-            <button type="submit" class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-700 border border-slate-200 hover:border-rose-200 text-xs font-semibold rounded-xl transition">
+            <button type="submit" class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-rose-500/10 text-slate-700 dark:text-slate-200 hover:text-rose-700 dark:hover:text-rose-300 border border-slate-200 dark:border-slate-700 hover:border-rose-200 dark:hover:border-rose-500/30 text-xs font-semibold rounded-xl transition">
               <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
               Regenerar Token
             </button>
@@ -475,8 +392,8 @@
     </div>
   </div>
 
-  <footer class="mt-auto py-6 border-t border-slate-200/80 bg-white/50 text-center text-xs text-slate-400">
-    TaskPilot · Organiza tus tareas, simplifica tu día.
+  <footer class="mt-auto py-6 border-t border-slate-200/80 dark:border-slate-800 bg-white/50 dark:bg-slate-900/50 text-center text-xs text-slate-400 dark:text-slate-500">
+    TaskPilot v{{ APP_VERSION }} · Organiza tus tareas, simplifica tu día.
   </footer>
 
   <script>
@@ -520,7 +437,7 @@
       modal.addEventListener('animationend', finish, { once: true });
       setTimeout(() => {
         if (modal.classList.contains('modal-leave')) finish();
-      }, 200);
+      }, 260);
     }
 
     function openEditModal(id, title, description, priority, category, dueDate, imageUrl) {
@@ -591,10 +508,14 @@
       STATUS_TABS.forEach((tab) => {
         const isActive = tab.dataset.filterStatus === status;
         tab.classList.toggle('bg-white', isActive);
+        tab.classList.toggle('dark:bg-slate-700', isActive);
         tab.classList.toggle('text-slate-900', isActive);
+        tab.classList.toggle('dark:text-white', isActive);
         tab.classList.toggle('shadow-sm', isActive);
         tab.classList.toggle('text-slate-600', !isActive);
+        tab.classList.toggle('dark:text-slate-400', !isActive);
         tab.classList.toggle('hover:text-slate-900', !isActive);
+        tab.classList.toggle('dark:hover:text-white', !isActive);
       });
     }
 
@@ -605,8 +526,8 @@
         return;
       }
       const styles = {
-        loading: 'bg-slate-50 text-slate-600 border border-slate-200',
-        error: 'bg-rose-50 text-rose-700 border border-rose-200',
+        loading: 'feedback-loading',
+        error: 'feedback-error',
       };
       tasksFeedback.className = `mb-3 px-4 py-2.5 rounded-xl text-xs font-medium ${styles[variant] || styles.loading}`;
       tasksFeedback.textContent = message;
@@ -738,7 +659,7 @@
 
       const finishCopy = () => {
         const originalHtml = btn.innerHTML;
-        btn.innerHTML = '<i data-lucide="check" class="w-3.5 h-3.5 text-emerald-600"></i> <span class="text-emerald-700">¡Copiado!</span>';
+        btn.innerHTML = '<i data-lucide="check" class="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400"></i> <span class="text-emerald-700 dark:text-emerald-300">¡Copiado!</span>';
         if (window.lucide) lucide.createIcons();
         setTimeout(() => {
           btn.innerHTML = originalHtml;

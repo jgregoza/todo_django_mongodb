@@ -4,17 +4,18 @@ Aplicación web personal de gestión de tareas con autenticación, prioridades, 
 
 - **Producción:** https://jzamora.pythonanywhere.com
 - **Repositorio:** https://github.com/jgregoza/todo_django_mongodb (rama `main`)
+- **Versión:** 1.2.0 (`APP_VERSION` en `config/settings.py`, expuesta por `config/context_processors.py`)
 - **Desplegado:** el SHA que indique `~/taskpilot-data/last_deployed_sha` en el servidor · Python 3.10 · Django 5.2 LTS
 
 ## Stack
 
-Django 5.2 (MVT), SQLite vía ORM, Pillow (validación de imágenes), python-dotenv, plantillas Django con Tailwind/Lucide por CDN. Hosting: PythonAnywhere (WSGI). Desarrollo: `coverage` y `ruff` (`requirements-dev.txt`).
+Django 5.2 (MVT), SQLite vía ORM, Pillow (validación de imágenes), python-dotenv, plantillas Django con Tailwind/Lucide por CDN. La interfaz usa Tailwind con `darkMode: 'class'` y assets propios (`todos/static/todos/app.css` y `app.js`). Hosting: PythonAnywhere (WSGI). Desarrollo: `coverage` y `ruff` (`requirements-dev.txt`).
 
 ## Mapa del repositorio
 
-- `config/`: `settings.py`, `urls.py`, `wsgi.py`, `asgi.py`.
-- `todos/`: `models.py`, `selectors.py` (lecturas, orden `-created_at,-id` para paginación estable), `services.py` (mutaciones), `views.py`, `forms.py`, `validators.py`, `urls.py`, `admin.py`, `tests.py`, `migrations/`.
-- `templates/`: interfaz web y páginas de error 400/403/404/500.
+- `config/`: `settings.py`, `urls.py`, `wsgi.py`, `asgi.py`, `context_processors.py`.
+- `todos/`: `models.py`, `selectors.py` (lecturas, orden `-created_at,-id` para paginación estable), `services.py` (mutaciones), `views.py`, `forms.py`, `validators.py`, `urls.py`, `admin.py`, `tests.py`, `migrations/`, `static/todos/` (CSS y JS de la interfaz).
+- `templates/`: interfaz web, páginas de error 400/403/404/500 y `partials/` (tema, mensajes y toggle compartidos).
 - `pythonanywhere_wsgi.py` y `seed_data.py` (este último solo para desarrollo).
 
 ## Datos y seguridad
@@ -30,6 +31,15 @@ Django 5.2 (MVT), SQLite vía ORM, Pillow (validación de imágenes), python-dot
 - Caché: `LocMemCache` declarada en `CACHES` con `TIMEOUT` configurable (`CACHE_TIMEOUT`, 300 s por defecto). `clearsessions` purga las sesiones caducadas de la BD **todos los días**, haya o no despliegue (ver sección de despliegue).
 - API: `/api/v1/todos/`, `/api/v1/todos/<id>/`, `/api/v1/todos/<id>/toggle/`, `/api/v1/todos/stats/` (compatibilidad en `/api/todos/`).
 - Calendario (RFC 5545): `/calendar/<feed_token>.ics` (feed `text/calendar` con componentes `VEVENT` de tareas con `due_date`, compatible con Google Calendar, Apple Calendar y Outlook; responde 404 estricto ante tokens no válidos o usuarios inactivos) y `/calendar/token/regenerate/` (POST autenticado y con CSRF para rotación inmediata de token). Tests: `CalendarIntegrationTests` en `todos/tests.py`.
+
+## Interfaz y experiencia de usuario
+
+- **Versión:** `APP_VERSION` (`config/settings.py`) es la fuente única; el context processor `app_meta` la expone. Se muestra en la cabecera del índice y en el pie de login/registro. No se muestra en las páginas de error.
+- **Tema:** modo claro/oscuro con `darkMode: 'class'`. La preferencia se guarda en `localStorage['taskpilot-theme']` (`dark`/`light`); sin preferencia se respeta `prefers-color-scheme`. `templates/partials/theme_init.html` aplica la clase antes de pintar (sin destello) y el toggle sol/luna está en la cabecera o fijo arriba a la derecha. Cubre índice, listado AJAX, modales, lightbox, login, registro y errores 400/403/404/500.
+- **Notificaciones:** partial `templates/partials/app_messages.html`. Éxito/info se cierran a los 5 s, aviso a los 7 s y error a los 10 s; todas tienen botón “Cerrar notificación”, pausan el temporizador con hover o foco y usan `role="status"`/`role="alert"` con `aria-live`. La variante se decide con `message.level_tag`, no con `message.tags`.
+- **Movimiento:** duraciones de 160–240 ms con easing suave; se animan opacidad/transform y colores, nunca altura o anchura de listas. Modales 220 ms de entrada y 160 ms de salida; lista 220 ms. `prefers-reduced-motion` desactiva animaciones y transiciones.
+- **Accesibilidad:** foco visible en enlaces y botones, `aria-label`/`aria-pressed` en el toggle, etiqueta en el cierre de toasts y contraste adaptado en ambos temas.
+- **Caché de assets:** `app.css` y `app.js` se enlazan con `?v={{ APP_VERSION }}` para invalidar la caché tras cada despliegue.
 
 ## Comandos
 
@@ -49,6 +59,14 @@ python manage.py test
 ruff check .
 git diff --check
 ```
+
+## QA de interfaz
+
+- Matriz manual claro/oscuro: índice con y sin tareas, filtros, paginación, modales de alta/edición/calendario, lightbox, login, registro, 400/403/404/500, toasts, 360 px y 1280 px.
+- Tema: recarga en oscuro sin destello; con `localStorage` limpio se respeta el sistema; el cambio del tema del sistema se refleja si no hay preferencia guardada.
+- Mensajes: éxito/info 5 s, aviso 7 s, error 10 s; pausa con hover/foco, cierre con X y teclado; varios toasts se apilan sin solaparse.
+- Movimiento reducido: modales y toasts sin animación; consola del navegador sin errores.
+- Regresión: filtros AJAX, paginación, CRUD, calendario, API, auth y `makemigrations --check` en “No changes detected”.
 
 ## CI
 
@@ -89,6 +107,14 @@ Notas operativas:
 - Si la tarea falla con `can't open file .../deploy_task.py`, el clon se quedó
   sin el script: bootstrap con `cd /home/jzamora/taskpilot && git pull --ff-only`
   en la consola y se ejecuta una vez.
+- Incidente 24-nov: la tarea devolvía `return code 127` porque
+  `taskpilot-env/bin/python3.10` apuntaba a
+  `/home/jzamora/.virtualenvs/todo-env/bin/python3.10` (inexistente) y
+  `pyvenv.cfg` conservaba `home` de ese venv. Se reparó sin recrear el entorno:
+  `ln -sfn /usr/bin/python3.10 ~/.virtualenvs/taskpilot-env/bin/python3.10` y
+  `home = /usr/bin` en `pyvenv.cfg`. Verificación: `python -V` → 3.10.5,
+  imports de Django/Pillow y ejecución manual de `deploy_task.py`. No usar
+  `/usr/bin/python3` (3.9).
 
 Credenciales: secret `PA_API_TOKEN` y variable `PA_USERNAME` en GitHub. En el
 servidor no se almacena ningún secreto (`$API_TOKEN` está pre-poblado en
@@ -158,6 +184,12 @@ Verificación: check, makemigrations --check, test, ruff, git diff --check
 ```
 
 Reglas con varias herramientas (Antigravity u otros agentes): un solo dueño del repositorio a la vez, commit antes de cambiar de herramienta, nada de agentes en paralelo sobre la misma rama y despliegue disparado por push a `main` (CI + tarea diaria). La consola de PythonAnywhere se usa solo para el bootstrap inicial o si el flujo automático se bloquea.
+
+## Historial de versiones
+
+- `1.0.0`: CRUD de tareas, autenticación, prioridades, categorías, fechas límite e imágenes privadas.
+- `1.1.0`: feed iCalendar (RFC 5545) y rotación de token (commit `67d5b95`).
+- `1.2.0`: modo oscuro, notificaciones con auto-cierre, versión visible y transiciones suaves.
 
 ## Convenciones
 

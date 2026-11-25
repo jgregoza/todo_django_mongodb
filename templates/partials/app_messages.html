@@ -1,0 +1,28 @@
+{% if messages %}
+<div id="app-messages"
+     class="fixed {{ messages_vertical|default:'top-4' }} right-4 left-4 sm:left-auto sm:w-[22rem] z-[60] flex flex-col gap-2 pointer-events-none"
+     aria-live="polite">
+  {% for message in messages %}
+  {% with variant=message.level_tag|default:'info' %}
+  <div data-app-message
+       data-autohide="{% if variant == 'error' %}10000{% elif variant == 'warning' %}7000{% else %}5000{% endif %}"
+       role="{% if variant == 'error' %}alert{% else %}status{% endif %}"
+       class="app-toast app-toast--{{ variant }} pointer-events-auto">
+    {% if variant == 'success' %}
+    <i data-lucide="check-circle-2" class="w-4 h-4 shrink-0"></i>
+    {% elif variant == 'error' %}
+    <i data-lucide="alert-circle" class="w-4 h-4 shrink-0"></i>
+    {% elif variant == 'warning' %}
+    <i data-lucide="alert-triangle" class="w-4 h-4 shrink-0"></i>
+    {% else %}
+    <i data-lucide="info" class="w-4 h-4 shrink-0"></i>
+    {% endif %}
+    <p class="flex-1 text-xs font-medium leading-relaxed">{{ message }}</p>
+    <button type="button" data-message-close class="app-toast-close" aria-label="Cerrar notificación" title="Cerrar">
+      <i data-lucide="x" class="w-3.5 h-3.5"></i>
+    </button>
+  </div>
+  {% endwith %}
+  {% endfor %}
+</div>
+{% endif %}

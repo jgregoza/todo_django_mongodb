@@ -1,0 +1,294 @@
+:root {
+  --ease-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-soft: cubic-bezier(0.4, 0, 1, 1);
+  --dur-fast: 160ms;
+  --dur-base: 220ms;
+  --dur-exit: 160ms;
+}
+
+html {
+  background-color: #f8fafc;
+  scroll-behavior: smooth;
+}
+
+html.dark {
+  background-color: #020617;
+  color-scheme: dark;
+}
+
+body {
+  font-family: "Plus Jakarta Sans", sans-serif;
+  transition: background-color var(--dur-base) var(--ease-soft),
+    color var(--dur-base) var(--ease-soft);
+}
+
+/* Transiciones discretas de controles */
+button,
+a,
+select,
+input,
+textarea {
+  transition-property: background-color, border-color, color, box-shadow,
+    opacity, transform;
+  transition-duration: var(--dur-fast);
+  transition-timing-function: var(--ease-soft);
+}
+
+button:not(:disabled):active {
+  transform: scale(0.985);
+  transition-duration: 120ms;
+}
+
+a:focus-visible,
+button:focus-visible {
+  outline: 2px solid #10b981;
+  outline-offset: 2px;
+}
+
+/* Actualización dinámica del listado de tareas */
+#task-list {
+  transition: opacity var(--dur-base) var(--ease-soft);
+}
+
+#task-list.is-loading {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.task-list-enter {
+  animation: task-list-in var(--dur-base) var(--ease-soft) both;
+}
+
+@keyframes task-list-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Aparición y cierre de modales */
+.modal-enter {
+  animation: modal-fade-in var(--dur-base) var(--ease-soft) both;
+}
+
+.modal-enter > div {
+  animation: modal-pop-in var(--dur-base) var(--ease-soft) both;
+}
+
+.modal-leave {
+  animation: modal-fade-out var(--dur-exit) var(--ease-in-soft) both;
+}
+
+.modal-leave > div {
+  animation: modal-pop-out var(--dur-exit) var(--ease-in-soft) both;
+}
+
+@keyframes modal-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modal-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes modal-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes modal-pop-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(6px) scale(0.99);
+  }
+}
+
+/* Feedback del listado dinámico */
+#tasks-feedback.feedback-loading {
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+}
+
+#tasks-feedback.feedback-error {
+  background-color: #fff1f2;
+  border: 1px solid #fecdd3;
+  color: #be123c;
+}
+
+html.dark #tasks-feedback.feedback-loading {
+  background-color: rgba(30, 41, 59, 0.6);
+  border-color: #334155;
+  color: #cbd5e1;
+}
+
+html.dark #tasks-feedback.feedback-error {
+  background-color: rgba(244, 63, 94, 0.12);
+  border-color: rgba(244, 63, 94, 0.3);
+  color: #fda4af;
+}
+
+/* Notificaciones (toasts) */
+.app-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  padding: 0.75rem 0.875rem;
+  border: 1px solid transparent;
+  border-radius: 1rem;
+  box-shadow: 0 18px 40px -24px rgba(15, 23, 42, 0.55);
+  font-size: 0.75rem;
+  line-height: 1.45;
+  animation: toast-in var(--dur-base) var(--ease-soft) both;
+}
+
+.app-toast--success {
+  background-color: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #065f46;
+}
+
+.app-toast--error {
+  background-color: #fff1f2;
+  border-color: #fecdd3;
+  color: #9f1239;
+}
+
+.app-toast--warning {
+  background-color: #fffbeb;
+  border-color: #fde68a;
+  color: #92400e;
+}
+
+.app-toast--info,
+.app-toast--debug {
+  background-color: #f0f9ff;
+  border-color: #bae6fd;
+  color: #075985;
+}
+
+html.dark .app-toast--success {
+  background-color: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.32);
+  color: #6ee7b7;
+}
+
+html.dark .app-toast--error {
+  background-color: rgba(244, 63, 94, 0.12);
+  border-color: rgba(244, 63, 94, 0.32);
+  color: #fda4af;
+}
+
+html.dark .app-toast--warning {
+  background-color: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.32);
+  color: #fcd34d;
+}
+
+html.dark .app-toast--info,
+html.dark .app-toast--debug {
+  background-color: rgba(14, 165, 233, 0.12);
+  border-color: rgba(14, 165, 233, 0.32);
+  color: #7dd3fc;
+}
+
+.app-toast.is-hiding {
+  animation: toast-out var(--dur-exit) var(--ease-in-soft) both;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes toast-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.99);
+  }
+}
+
+.app-toast-close {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.3rem;
+  border-radius: 0.5rem;
+  opacity: 0.7;
+  transition: opacity var(--dur-fast) var(--ease-soft),
+    background-color var(--dur-fast) var(--ease-soft);
+}
+
+.app-toast-close:hover {
+  opacity: 1;
+  background-color: rgba(15, 23, 42, 0.06);
+}
+
+html.dark .app-toast-close:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  button:not(:disabled):active {
+    transform: none;
+  }
+
+  .app-toast {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  .app-toast.is-hiding {
+    opacity: 0;
+    animation: none;
+  }
+}

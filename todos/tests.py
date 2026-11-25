@@ -1395,3 +1395,53 @@ class CalendarIntegrationTests(TestCase):
         self.assertEqual(response.context["calendar_token"], token)
         self.assertIn(token, response.context["calendar_feed_url"])
         self.assertIn("calendar-modal", response.content.decode("utf-8"))
+
+
+class UIThemeAndMessagesTests(TestCase):
+    """Pruebas de la capa de UI: versión, tema oscuro y notificaciones."""
+
+    def setUp(self):
+        self.user = User.objects.create_user("ui_user", password="Passw0rd!123")
+
+    def test_app_version_is_exposed_to_templates(self):
+        self.assertEqual(settings.APP_VERSION, "1.2.0")
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("index"))
+
+        self.assertContains(response, "v1.2.0")
+        self.assertNotContains(response, "Django 5 • PythonAnywhere Ready")
+        self.assertEqual(response.context["APP_VERSION"], settings.APP_VERSION)
+
+    def test_auth_pages_include_theme_toggle_and_version(self):
+        login_response = self.client.get(reverse("login"))
+        self.assertContains(login_response, "data-theme-toggle")
+        self.assertContains(login_response, "v1.2.0")
+
+        register_response = self.client.get(reverse("register"))
+        self.assertContains(register_response, "data-theme-toggle")
+        self.assertContains(register_response, "v1.2.0")
+
+    def test_success_message_autohides_after_five_seconds(self):
+        self.client.force_login(self.user)
+
+        response = self.client.post(
+            reverse("create_todo"),
+            {"title": "Tarea UI", "priority": "media", "category": "General"},
+            follow=True,
+        )
+
+        self.assertContains(response, "Tarea creada exitosamente.")
+        self.assertContains(response, 'data-autohide="5000"')
+        self.assertContains(response, "Cerrar notificación")
+
+    def test_error_message_autohides_after_ten_seconds(self):
+        response = self.client.post(
+            reverse("login"),
+            {"username": "ui_user", "password": "incorrecta"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Usuario o contraseña incorrectos.")
+        self.assertContains(response, 'data-autohide="10000"')
+        self.assertContains(response, 'role="alert"')

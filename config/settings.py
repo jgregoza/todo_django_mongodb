@@ -11,6 +11,9 @@ from dotenv import load_dotenv
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Versión de la aplicación: fuente única para la interfaz.
+APP_VERSION = "1.2.0"
+
 # Cargar variables de entorno desde .env
 load_dotenv(BASE_DIR / ".env")
 
@@ -74,6 +77,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "config.context_processors.app_meta",
             ],
         },
     },

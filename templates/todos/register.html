@@ -1,3 +1,4 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -5,33 +6,31 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Crear Cuenta | TaskPilot</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  {% include "partials/theme_init.html" %}
   <script src="https://unpkg.com/lucide@latest"></script>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <style>body { font-family: 'Plus Jakarta Sans', sans-serif; }</style>
+  <link rel="stylesheet" href="{% static 'todos/app.css' %}?v={{ APP_VERSION }}">
+  <script src="{% static 'todos/app.js' %}" defer></script>
 </head>
-<body class="bg-slate-50 text-slate-800 min-h-screen flex items-center justify-center p-4">
+<body class="bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200 min-h-screen flex items-center justify-center p-4">
 
-  <div class="max-w-md w-full bg-white rounded-3xl p-8 border border-slate-200 shadow-xl">
+  <div class="fixed top-4 right-4 z-20">
+    {% include "partials/theme_toggle.html" %}
+  </div>
+
+  {% include "partials/app_messages.html" with messages_vertical="bottom-4" %}
+
+  <div class="max-w-md w-full bg-white dark:bg-slate-900 rounded-3xl p-8 border border-slate-200 dark:border-slate-800 shadow-xl dark:shadow-slate-950/60">
     <div class="text-center mb-8">
       <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-white mx-auto mb-3 shadow-md shadow-emerald-500/20">
         <i data-lucide="user-plus" class="w-6 h-6"></i>
       </div>
-      <h1 class="text-2xl font-bold text-slate-900">Crear Cuenta</h1>
-      <p class="text-xs text-slate-500 mt-1">Registra tu usuario para gestionar tus tareas</p>
+      <h1 class="text-2xl font-bold text-slate-900 dark:text-white">Crear Cuenta</h1>
+      <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Registra tu usuario para gestionar tus tareas</p>
     </div>
-
-    {% if messages %}
-    <div class="mb-5 space-y-2">
-      {% for message in messages %}
-      <div class="p-3 text-xs rounded-xl {% if message.tags == 'error' %}bg-rose-50 text-rose-700 border border-rose-200{% else %}bg-emerald-50 text-emerald-700 border border-emerald-200{% endif %}">
-        {{ message }}
-      </div>
-      {% endfor %}
-    </div>
-    {% endif %}
 
     {% if form.errors %}
-    <div class="mb-5 p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 space-y-1">
+    <div class="mb-5 p-3.5 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 rounded-xl text-xs text-rose-700 dark:text-rose-300 space-y-1">
       {% for field, errors in form.errors.items %}
         {% for error in errors %}
           <p>• {{ error }}</p>
@@ -43,18 +42,18 @@
     <form method="POST" class="space-y-4">
       {% csrf_token %}
       <div>
-        <label class="block text-xs font-semibold text-slate-700 mb-1.5">Nombre de Usuario</label>
-        <input type="text" name="username" required autofocus class="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500">
+        <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Nombre de Usuario</label>
+        <input type="text" name="username" required autofocus class="w-full text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500">
       </div>
 
       <div>
-        <label class="block text-xs font-semibold text-slate-700 mb-1.5">Contraseña</label>
-        <input type="password" name="password1" required class="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500">
+        <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Contraseña</label>
+        <input type="password" name="password1" required class="w-full text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500">
       </div>
 
       <div>
-        <label class="block text-xs font-semibold text-slate-700 mb-1.5">Confirmar Contraseña</label>
-        <input type="password" name="password2" required class="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500">
+        <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Confirmar Contraseña</label>
+        <input type="password" name="password2" required class="w-full text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500">
       </div>
 
       <button type="submit" class="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl shadow-md shadow-emerald-600/25 transition mt-2">
@@ -62,12 +61,13 @@
       </button>
     </form>
 
-    <div class="mt-6 text-center pt-6 border-t border-slate-100 text-xs text-slate-500">
+    <div class="mt-6 text-center pt-6 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400">
       ¿Ya tienes cuenta? 
-      <a href="{% url 'login' %}" class="font-bold text-emerald-600 hover:text-emerald-700">Inicia sesión</a>
+      <a href="{% url 'login' %}" class="font-bold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300">Inicia sesión</a>
       <div class="mt-3">
-        <a href="{% url 'index' %}" class="text-slate-400 hover:text-slate-600">&larr; Volver al inicio</a>
+        <a href="{% url 'index' %}" class="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300">&larr; Volver al inicio</a>
       </div>
+      <p class="mt-4 text-[11px] text-slate-400 dark:text-slate-500">TaskPilot v{{ APP_VERSION }}</p>
     </div>
   </div>
 

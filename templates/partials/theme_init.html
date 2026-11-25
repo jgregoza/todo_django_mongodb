@@ -1,0 +1,22 @@
+<script>
+  tailwind.config = { darkMode: "class" };
+</script>
+<style>
+  html { background-color: #f8fafc; }
+  html.dark { background-color: #020617; color-scheme: dark; }
+</style>
+<script>
+  (function () {
+    try {
+      var key = "taskpilot-theme";
+      var saved = localStorage.getItem(key);
+      var dark =
+        saved === "dark" ||
+        (!saved && window.matchMedia("(prefers-color-scheme: dark)").matches);
+      document.documentElement.classList.toggle("dark", dark);
+      document.documentElement.style.colorScheme = dark ? "dark" : "light";
+    } catch (error) {
+      /* Sin localStorage disponible: se usa el tema claro. */
+    }
+  })();
+</script>
